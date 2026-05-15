@@ -92,3 +92,28 @@ def test_stream_yields_events_until_complete(tmp_path, app_with_fake_runner):
 
     assert events[0]["type"] == "stage"
     assert events[-1]["type"] == "complete"
+
+
+from unittest.mock import patch
+
+
+def test_post_record_creates_job(tmp_path, monkeypatch):
+    from speechtotext.api.app import create_app
+    app = create_app()
+    out = tmp_path / "rec.wav"
+    client = TestClient(app)
+
+    with patch("speechtotext.api.runner.record_to_wav") as rec:
+        def fake_record(out_path, **kw):
+            kw["stop_event"].wait()
+            out_path.write_bytes(b"WAVE")
+            return out_path
+        rec.side_effect = fake_record
+
+        r = client.post("/jobs/record", json={"out": str(out)})
+        assert r.status_code == 202
+        job_id = r.json()["job_id"]
+
+        r2 = client.post(f"/jobs/{job_id}/stop")
+        assert r2.status_code == 200
+        assert out.exists()

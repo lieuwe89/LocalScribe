@@ -15,6 +15,7 @@ from speechtotext.asr.faster_whisper import FasterWhisperASR
 from speechtotext.backend import resolve_backend
 from speechtotext.config import Config, DEFAULT_CONFIG_PATH, load_config
 from speechtotext.diarize.pyannote import PyannoteDiarizer
+from speechtotext.ingest.mic import record_to_wav
 from speechtotext.models import ProgressEvent, Transcript
 from speechtotext.pipeline import Pipeline
 from speechtotext.writer import write_transcript
@@ -88,3 +89,52 @@ def run_transcribe_job(
     threading.Thread(target=_work, daemon=True).start()
     if _own_loop:
         threading.Thread(target=lambda: (loop.run_forever(), loop.close()), daemon=True).start()
+
+
+_STOP_EVENTS: dict[str, threading.Event] = {}
+
+
+def run_record_job(
+    registry: JobRegistry,
+    job_id: str,
+    out_path: Path,
+    device: str | None = None,
+) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+        _own_loop = False
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        _own_loop = True
+
+    emit = _make_emit(loop, registry, job_id)
+    stop = threading.Event()
+    _STOP_EVENTS[job_id] = stop
+
+    def _work() -> None:
+        try:
+            emit(StageEvent(stage="record", percent=0.0))
+            record_to_wav(out_path, device=device, stop_event=stop)
+            emit(StageEvent(stage="record", percent=1.0))
+            emit(CompleteEvent(
+                transcript_id="",
+                paths={"wav": str(out_path)},
+            ))
+        except Exception as exc:  # noqa: BLE001
+            emit(ErrorEvent(message=f"{type(exc).__name__}: {exc}"))
+        finally:
+            _STOP_EVENTS.pop(job_id, None)
+            if _own_loop:
+                loop.call_soon_threadsafe(loop.stop)
+
+    threading.Thread(target=_work, daemon=True).start()
+    if _own_loop:
+        threading.Thread(target=lambda: (loop.run_forever(), loop.close()), daemon=True).start()
+
+
+def stop_record_job(job_id: str) -> bool:
+    ev = _STOP_EVENTS.get(job_id)
+    if ev is None:
+        return False
+    ev.set()
+    return True

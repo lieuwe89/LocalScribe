@@ -72,3 +72,26 @@ async def stream_job(job_id: str, request: Request):
 
 def _json_dumps(obj: dict) -> str:
     return json.dumps(obj, ensure_ascii=False)
+
+
+class RecordRequest(BaseModel):
+    out: str
+    device: str | None = None
+
+
+@router.post("/jobs/record", status_code=202)
+def post_record(req: RecordRequest, request: Request) -> dict:
+    out = Path(req.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    registry = request.app.state.jobs
+    job_id = registry.create(kind="record", audio_path=str(out))
+    runner.run_record_job(registry, job_id, out, device=req.device)
+    return {"job_id": job_id}
+
+
+@router.post("/jobs/{job_id}/stop")
+def stop_job(job_id: str) -> dict:
+    ok = runner.stop_record_job(job_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="job not recording or already stopped")
+    return {"ok": True}
