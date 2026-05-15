@@ -4,6 +4,7 @@ import asyncio
 import enum
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import AsyncIterator
 
 from speechtotext.api.events import (
@@ -39,6 +40,10 @@ class JobRegistry:
     def __init__(self) -> None:
         self._jobs: dict[str, JobRecord] = {}
         self._queues: dict[str, list[asyncio.Queue[JobEvent | None]]] = {}
+        self._on_complete_dir: callable | None = None
+
+    def set_on_complete_dir(self, cb) -> None:
+        self._on_complete_dir = cb
 
     def create(self, kind: str, audio_path: str | None = None) -> str:
         job_id = uuid.uuid4().hex
@@ -62,6 +67,8 @@ class JobRegistry:
             rec.status = JobStatus.complete
             rec.transcript_id = event.transcript_id
             rec.paths = dict(event.paths or {})
+            if self._on_complete_dir and rec.audio_path:
+                self._on_complete_dir(Path(rec.audio_path).parent)
         elif isinstance(event, ErrorEvent):
             rec.status = JobStatus.failed
             rec.error = event.message
