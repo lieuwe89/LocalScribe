@@ -5,6 +5,8 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from speechtotext.api.jobs import JobRegistry
+from speechtotext.api.routes_config import router as config_router
+from speechtotext.api.routes_devices import router as devices_router
 from speechtotext.api.routes_jobs import router as jobs_router
 from speechtotext.api.routes_transcripts import router as transcripts_router
 from speechtotext.config import load_config
@@ -24,6 +26,8 @@ def create_app() -> FastAPI:
 
     app.state.jobs.set_on_complete_dir(app.state.library_dirs.add)
 
+    app.include_router(devices_router)
+    app.include_router(config_router)
     app.include_router(jobs_router)
     app.include_router(transcripts_router)
 
