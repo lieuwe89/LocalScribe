@@ -13,3 +13,5 @@ venv/
 *.txt.tmp
 *.json.tmp
 .DS_Store
+tests/fixtures/audio/*.wav
+tests/fixtures/audio/_work/
