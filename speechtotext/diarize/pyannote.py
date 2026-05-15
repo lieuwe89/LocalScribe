@@ -20,7 +20,12 @@ class PyannoteDiarizer:
     ) -> None:
         if not hf_token:
             raise ValueError("pyannote requires a Hugging Face access token")
-        self._pipeline = Pipeline.from_pretrained(model_id, use_auth_token=hf_token)
+        # pyannote 4.x renamed `use_auth_token` -> `token`. Pass both names so
+        # 3.x and 4.x both work; whichever the installed version accepts wins.
+        try:
+            self._pipeline = Pipeline.from_pretrained(model_id, token=hf_token)
+        except TypeError:
+            self._pipeline = Pipeline.from_pretrained(model_id, use_auth_token=hf_token)
         device = torch.device(backend)
         self._pipeline.to(device)
 
