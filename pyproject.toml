@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "Local privacy-preserving speech-to-text with speaker diarization."
 requires-python = ">=3.11"
 authors = [{ name = "Lieuwe Jongsma" }]
-dependencies = []
+dependencies = [
+    "faster-whisper>=1.0",
+]
 
 [project.optional-dependencies]
 dev = [
