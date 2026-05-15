@@ -1,9 +1,16 @@
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
+import wave
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from speechtotext.ingest.mic import record_to_wav
+from speechtotext.ingest.mic import _install_stop_signals, record_to_wav
 
 
 def test_record_writes_wav(tmp_path: Path):
@@ -27,3 +34,106 @@ def test_record_writes_wav(tmp_path: Path):
 
     assert sf_cls.call_args.args[0] == str(out)
     assert sf_handle.write.call_count == 2
+
+
+def test_install_stop_signals_sets_event_on_sigterm():
+    """Verify SIGTERM into the registered handler sets stop_event."""
+    stop = threading.Event()
+    with _install_stop_signals(stop):
+        # Send ourselves SIGTERM; handler should flip the event.
+        os.kill(os.getpid(), signal.SIGTERM)
+        # signal handlers run synchronously on the main thread between bytecodes;
+        # give the interpreter a tick to dispatch.
+        time.sleep(0.05)
+        assert stop.is_set(), "SIGTERM should have set the stop_event"
+
+
+def test_install_stop_signals_sets_event_on_sigint():
+    stop = threading.Event()
+    with _install_stop_signals(stop):
+        os.kill(os.getpid(), signal.SIGINT)
+        time.sleep(0.05)
+        assert stop.is_set(), "SIGINT should have set the stop_event"
+
+
+def test_install_stop_signals_restores_handlers():
+    """Prior handler should be restored after the context manager exits."""
+    sentinel_called: list[bool] = []
+
+    def _prior(_sig, _frame):
+        sentinel_called.append(True)
+
+    original = signal.signal(signal.SIGTERM, _prior)
+    try:
+        stop = threading.Event()
+        with _install_stop_signals(stop):
+            pass  # handler temporarily replaced
+        # Restored — sending SIGTERM should call _prior, not flip stop.
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(0.05)
+        assert sentinel_called == [True]
+        assert not stop.is_set()
+    finally:
+        signal.signal(signal.SIGTERM, original)
+
+
+def test_install_stop_signals_skips_in_worker_thread():
+    """signal.signal raises ValueError off the main thread; we swallow it."""
+    error: list[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            stop = threading.Event()
+            with _install_stop_signals(stop):
+                # should not raise; just no-op
+                pass
+        except BaseException as exc:  # noqa: BLE001
+            error.append(exc)
+
+    t = threading.Thread(target=_runner)
+    t.start()
+    t.join()
+    assert error == []
+
+
+def test_record_to_wav_survives_sigterm_with_valid_header(tmp_path: Path):
+    """End-to-end: a child process recording to a file should produce a valid
+    WAV header even when killed with SIGTERM mid-loop. Uses mocked audio I/O
+    inside the child to keep the test hermetic."""
+    out = tmp_path / "rec.wav"
+    script = tmp_path / "runner.py"
+    script.write_text(
+        f"""
+import sys, os, time
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+import numpy as np
+
+from speechtotext.ingest import mic
+
+# Replace the sounddevice InputStream with a generator that emits silent blocks
+# forever so the recorder is "live" when SIGTERM arrives. SoundFile stays real
+# so the file on disk actually has a valid header after __exit__.
+fake_stream = MagicMock()
+fake_stream.__enter__.return_value = fake_stream
+fake_stream.__exit__.return_value = False
+def _read(n):
+    return np.zeros((n, 1), dtype=np.int16), False
+fake_stream.read.side_effect = _read
+
+with patch.object(mic.sd, "InputStream", return_value=fake_stream):
+    mic.record_to_wav(Path({str(out)!r}), sample_rate=16000, channels=1, block_size=1600)
+"""
+    )
+    proc = subprocess.Popen([sys.executable, str(script)])
+    # let it record ~0.5s, then SIGTERM
+    time.sleep(0.5)
+    proc.terminate()  # SIGTERM
+    proc.wait(timeout=5)
+    assert proc.returncode == 0, "child should exit cleanly after SIGTERM"
+    assert out.exists()
+    # Header must be valid — wave.open must succeed without raising.
+    with wave.open(str(out)) as w:
+        assert w.getframerate() == 16000
+        assert w.getnchannels() == 1
+        assert w.getnframes() > 0, "should have captured at least one frame"

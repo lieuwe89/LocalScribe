@@ -1,10 +1,47 @@
 from __future__ import annotations
 
+import signal
 import threading
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 import sounddevice as sd
 import soundfile as sf
+
+
+@contextmanager
+def _install_stop_signals(stop: threading.Event) -> Iterator[None]:
+    """Install SIGINT + SIGTERM handlers that set ``stop``.
+
+    Ensures the recording loop exits cleanly so ``SoundFile.__exit__`` can patch
+    the RIFF header sizes. Without this, SIGTERM (sent by orchestrators,
+    `kill`, supervisord, etc.) bypasses the context managers and leaves the WAV
+    with a placeholder size, requiring manual recovery.
+
+    Signal handlers can only be installed in the main thread; if called from
+    a worker thread we silently skip and rely on the caller's stop_event.
+    """
+    prev_handlers: dict[int, signal.Handlers | None] = {}
+
+    def _set_stop(_sig: int, _frame) -> None:
+        stop.set()
+
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                prev_handlers[sig] = signal.signal(sig, _set_stop)
+            except ValueError:
+                # not main thread; skip
+                prev_handlers = {}
+                break
+        yield
+    finally:
+        for sig, prev in prev_handlers.items():
+            try:
+                signal.signal(sig, prev)
+            except (ValueError, TypeError):
+                pass
 
 
 def record_to_wav(
@@ -18,7 +55,7 @@ def record_to_wav(
     stop = stop_event or threading.Event()
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with sf.SoundFile(
+    with _install_stop_signals(stop), sf.SoundFile(
         str(out_path),
         mode="w",
         samplerate=sample_rate,
