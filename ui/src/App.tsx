@@ -1,5 +1,24 @@
+import { useState, useEffect } from 'react';
 import './styles/global.css';
+import { Window } from './chrome/Window';
+import { Sidebar } from './chrome/Sidebar';
+import { useLibrary } from './stores/library';
+import type { Route } from './types/route';
 
 export default function App() {
-  return <div className="stage">LocalScribe</div>;
+  const [route, setRoute] = useState<Route>('idle');
+  const [tid, setTid] = useState<string | null>(null);
+  const refreshLibrary = useLibrary(s => s.refresh);
+
+  useEffect(() => { refreshLibrary().catch(() => {}); }, [refreshLibrary]);
+
+  return (
+    <Window screenLabel={route}>
+      <Sidebar route={route} setRoute={setRoute} currentTranscriptId={tid} setCurrentTranscriptId={setTid} />
+      <div className="main">
+        <div className="main-header"><span className="title">{route}</span></div>
+        <div className="main-body"><pre>{route}</pre></div>
+      </div>
+    </Window>
+  );
 }
