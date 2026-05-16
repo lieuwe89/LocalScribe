@@ -17,7 +17,7 @@ from speechtotext.config import Config, DEFAULT_CONFIG_PATH, load_config
 from speechtotext.diarize.pyannote import PyannoteDiarizer
 from speechtotext.ingest.mic import record_to_wav
 from speechtotext.models import ProgressEvent, Transcript
-from speechtotext.pipeline import Pipeline
+from speechtotext.pipeline import CancelledError, Pipeline
 from speechtotext.writer import write_transcript
 
 
@@ -61,6 +61,8 @@ def run_transcribe_job(
         _own_loop = True
 
     emit = _make_emit(loop, registry, job_id)
+    cancel = threading.Event()
+    _CANCEL_EVENTS[job_id] = cancel
 
     def _work() -> None:
         try:
@@ -71,6 +73,7 @@ def run_transcribe_job(
                 language=None if language in (None, "auto") else language,
                 num_speakers=num_speakers,
                 on_progress=_bridge_progress(emit),
+                cancel_event=cancel,
             )
             emit(StageEvent(stage="write", percent=0.0))
             txt, json_path = write_transcript(transcript)
@@ -80,9 +83,12 @@ def run_transcribe_job(
                 transcript_id=audio.stem,
                 paths={"txt": str(txt), "json": str(json_path)},
             ))
+        except CancelledError:
+            emit(ErrorEvent(message="cancelled"))
         except Exception as exc:  # noqa: BLE001
             emit(ErrorEvent(message=f"{type(exc).__name__}: {exc}"))
         finally:
+            _CANCEL_EVENTS.pop(job_id, None)
             if _own_loop:
                 loop.call_soon_threadsafe(loop.stop)
 
@@ -92,6 +98,15 @@ def run_transcribe_job(
 
 
 _STOP_EVENTS: dict[str, threading.Event] = {}
+_CANCEL_EVENTS: dict[str, threading.Event] = {}
+
+
+def cancel_transcribe_job(job_id: str) -> bool:
+    ev = _CANCEL_EVENTS.get(job_id)
+    if ev is None:
+        return False
+    ev.set()
+    return True
 
 
 def run_record_job(

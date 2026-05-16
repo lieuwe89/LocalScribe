@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 from faster_whisper import WhisperModel
 
@@ -12,6 +13,10 @@ _DEVICE_MAP: dict[str, tuple[str, str]] = {
     "cuda": ("cuda", "float16"),
     "mps": ("cpu", "int8"),  # CTranslate2 has no native MPS; CPU on Apple Silicon
 }
+
+
+class CancelledError(Exception):
+    pass
 
 
 class FasterWhisperASR:
@@ -29,7 +34,13 @@ class FasterWhisperASR:
             download_root=str(download_root) if download_root else None,
         )
 
-    def transcribe(self, wav_path: Path, language: str | None) -> list[Segment]:
+    def transcribe(
+        self,
+        wav_path: Path,
+        language: str | None,
+        on_progress: Callable[[float], None] | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> list[Segment]:
         segments_iter, info = self._model.transcribe(
             str(wav_path),
             language=language,
@@ -37,8 +48,11 @@ class FasterWhisperASR:
             temperature=0.0,
             vad_filter=True,
         )
+        duration = float(getattr(info, "duration", 0.0) or 0.0)
         out: list[Segment] = []
         for s in segments_iter:
+            if cancel_event is not None and cancel_event.is_set():
+                raise CancelledError("transcription cancelled")
             out.append(
                 Segment(
                     start=float(s.start),
@@ -47,4 +61,7 @@ class FasterWhisperASR:
                     language=info.language,
                 )
             )
+            if on_progress and duration > 0:
+                pct = min(1.0, float(s.end) / duration)
+                on_progress(pct)
         return out

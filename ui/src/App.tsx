@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { audioDir, join } from '@tauri-apps/api/path';
 import './styles/global.css';
 import { Window } from './chrome/Window';
 import { Sidebar } from './chrome/Sidebar';
 import { MainHeader } from './chrome/MainHeader';
-import { IdleScreen } from './screens/IdleScreen';
+import { IdleScreen, type TranscribeOpts } from './screens/IdleScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
 import { CompleteScreen } from './screens/CompleteScreen';
 import { RecordScreen } from './screens/RecordScreen';
@@ -13,7 +13,7 @@ import { WatchScreen } from './screens/WatchScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { useLibrary } from './stores/library';
 import { useTranscripts } from './stores/transcripts';
-import { startTranscribe, startRecord, stopRecord } from './stores/jobs';
+import { useJobs, startTranscribe, startRecord, stopRecord } from './stores/jobs';
 import { useRecording } from './stores/recording';
 import { api } from './api/client';
 import { checkForUpdates } from './updater';
@@ -21,7 +21,7 @@ import type { AudioDeviceDto } from './api/types';
 import type { Route } from './types/route';
 
 export default function App() {
-  const [route, setRoute] = useState<Route>('idle');
+  const [route, setRouteState] = useState<Route>('idle');
   const [tid, setTid] = useState<string | null>(null);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [currentAudioPath, setCurrentAudioPath] = useState<string>('');
@@ -33,6 +33,16 @@ export default function App() {
   const currentDoc = useTranscripts(s => (tid ? s.byId[tid] : undefined));
   const relabel = useTranscripts(s => s.relabel);
   const recording = useRecording();
+  const activeJob = useJobs(s => (currentJobId ? s.byId[currentJobId] : undefined));
+  const jobActive = !!activeJob && (activeJob.status === 'pending' || activeJob.status === 'running');
+
+  const setRoute = useCallback((r: Route) => {
+    if (r === 'idle' && jobActive) {
+      setRouteState('progress');
+    } else {
+      setRouteState(r);
+    }
+  }, [jobActive]);
 
   useEffect(() => { refreshLibrary().catch(() => {}); }, [refreshLibrary]);
   useEffect(() => { api<AudioDeviceDto[]>('/devices').then(setDevices).catch(() => {}); }, []);
@@ -45,18 +55,24 @@ export default function App() {
 
   return (
     <Window screenLabel={route}>
-      <Sidebar route={route} setRoute={setRoute} currentTranscriptId={tid} setCurrentTranscriptId={setTid} />
+      <Sidebar
+        route={route}
+        setRoute={setRoute}
+        currentTranscriptId={tid}
+        setCurrentTranscriptId={setTid}
+        jobActive={jobActive}
+      />
       <div className="main">
         <MainHeader route={route} isLive={route === 'record' && recording.active} />
         <div className="main-body">
           {route === 'idle' && (
             <IdleScreen
               recentFiles={recentItems}
-              onTranscribe={async (path) => {
-                const id = await startTranscribe(path);
+              onTranscribe={async (path: string, opts: TranscribeOpts) => {
+                const id = await startTranscribe(path, opts);
                 setCurrentJobId(id);
                 setCurrentAudioPath(path);
-                setRoute('progress');
+                setRouteState('progress');
               }}
             />
           )}
@@ -67,8 +83,13 @@ export default function App() {
               onComplete={async (transcriptId) => {
                 await loadTranscript(transcriptId).catch(() => {});
                 setTid(transcriptId);
-                setRoute('complete');
+                setCurrentJobId(null);
+                setRouteState('complete');
                 refreshLibrary().catch(() => {});
+              }}
+              onCancelled={() => {
+                setCurrentJobId(null);
+                setRouteState('idle');
               }}
             />
           )}
@@ -105,14 +126,14 @@ export default function App() {
                 useRecording.getState().setActive(false);
                 const transcribeJobId = await startTranscribe(currentAudioPath);
                 setCurrentJobId(transcribeJobId);
-                setRoute('progress');
+                setRouteState('progress');
               }}
               onPause={() => useRecording.getState().setPaused(!recording.paused)}
               onDiscard={() => { useRecording.getState().reset(); }}
             />
           )}
           {route === 'library' && (
-            <LibraryScreen setRoute={setRoute} setTid={setTid} />
+            <LibraryScreen setRoute={setRouteState} setTid={setTid} />
           )}
           {route === 'watch' && (
             <WatchScreen />

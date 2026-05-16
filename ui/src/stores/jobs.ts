@@ -58,6 +58,10 @@ export async function stopRecord(jobId: string): Promise<void> {
   await api(`/jobs/${jobId}/stop`, { method: 'POST' });
 }
 
+export async function cancelTranscribe(jobId: string): Promise<void> {
+  await api(`/jobs/${jobId}/cancel`, { method: 'POST' });
+}
+
 export async function fetchJob(jobId: string): Promise<JobRecord> {
   return api<JobRecord>(`/jobs/${jobId}`);
 }

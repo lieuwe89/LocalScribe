@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { useJobs } from '../stores/jobs';
+import { useEffect, useRef, useState } from 'react';
+import { useJobs, cancelTranscribe } from '../stores/jobs';
 
 const STAGES = ['ingest', 'asr', 'diarize', 'merge', 'write'] as const;
 
@@ -10,21 +10,41 @@ function fmtTimestamp(secs: number) {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+function fmtElapsed(secs: number) {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 interface Props {
   jobId: string;
   audioPath: string;
   onComplete: (transcriptId: string) => void;
+  onCancelled: () => void;
 }
 
-export function ProgressScreen({ jobId, audioPath, onComplete }: Props) {
+export function ProgressScreen({ jobId, audioPath, onComplete, onCancelled }: Props) {
   const job = useJobs(s => s.byId[jobId]);
+  const [elapsed, setElapsed] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
+  const startRef = useRef<number>(Date.now());
+  const lastPctRef = useRef<number>(0);
+  const lastChangeRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    startRef.current = Date.now();
+    const id = setInterval(() => setElapsed((Date.now() - startRef.current) / 1000), 250);
+    return () => clearInterval(id);
+  }, [jobId]);
 
   useEffect(() => {
     if (job?.status === 'complete') {
       const transcriptId = job.transcriptId ?? jobId;
       onComplete(transcriptId);
+    } else if (job?.status === 'failed' && job.error === 'cancelled') {
+      onCancelled();
     }
-  }, [job?.status, job?.transcriptId, jobId, onComplete]);
+  }, [job?.status, job?.transcriptId, job?.error, jobId, onComplete, onCancelled]);
 
   if (!job) return null;
 
@@ -33,13 +53,41 @@ export function ProgressScreen({ jobId, audioPath, onComplete }: Props) {
     ? 0
     : ((currentIdx + job.percent) / STAGES.length) * 100;
 
+  if (overallPercent !== lastPctRef.current) {
+    lastPctRef.current = overallPercent;
+    lastChangeRef.current = Date.now();
+  }
+  const stalled = Date.now() - lastChangeRef.current > 3000;
+
+  const handleCancel = async () => {
+    if (cancelling) return;
+    setCancelling(true);
+    try { await cancelTranscribe(jobId); } catch { setCancelling(false); }
+  };
+
   return (
     <div className="progress">
       <div className="doc-head">
         <div className="file-meta">{audioPath}</div>
-        <h1>Transcribing…</h1>
+        <div className="progress-title-row">
+          <h1>Transcribing…</h1>
+          <button
+            className="btn-ghost danger"
+            onClick={handleCancel}
+            disabled={cancelling || job.status === 'complete' || job.status === 'failed'}
+          >
+            {cancelling ? 'Cancelling…' : 'Cancel'}
+          </button>
+        </div>
+        <div className="progress-meta">
+          <span>Elapsed {fmtElapsed(elapsed)}</span>
+          <span className="sep">·</span>
+          <span>{Math.round(overallPercent)}%</span>
+        </div>
       </div>
-      <div className="bar"><div style={{ width: `${overallPercent}%` }} /></div>
+      <div className={'bar' + (stalled ? ' indeterminate' : '')}>
+        <div style={{ width: `${overallPercent}%` }} />
+      </div>
       <div className="stages">
         {STAGES.map((s, i) => {
           const cls = i < currentIdx ? 'done' : i === currentIdx ? 'active' : '';
@@ -59,7 +107,7 @@ export function ProgressScreen({ jobId, audioPath, onComplete }: Props) {
           </div>
         ))}
       </div>
-      {job.status === 'failed' && job.error && <div className="err">{job.error}</div>}
+      {job.status === 'failed' && job.error && job.error !== 'cancelled' && <div className="err">{job.error}</div>}
     </div>
   );
 }

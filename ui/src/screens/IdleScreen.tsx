@@ -1,18 +1,72 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../primitives/Icon';
 import { open } from '@tauri-apps/plugin-dialog';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import type { TranscriptListItem } from '../api/types';
 
+export interface TranscribeOpts {
+  language?: string;
+  num_speakers?: number;
+  backend?: string;
+}
+
 interface Props {
-  onTranscribe: (path: string) => void;
+  onTranscribe: (path: string, opts: TranscribeOpts) => void;
   recentFiles: TranscriptListItem[];
 }
 
 const ACCEPTED_EXTS = ['mp3', 'm4a', 'wav', 'ogg', 'flac', 'webm'];
 
+const LANGUAGES: { code: string; label: string }[] = [
+  { code: 'auto', label: 'Auto-detect' },
+  { code: 'en',   label: 'English' },
+  { code: 'nl',   label: 'Dutch' },
+  { code: 'de',   label: 'German' },
+  { code: 'fr',   label: 'French' },
+  { code: 'es',   label: 'Spanish' },
+  { code: 'it',   label: 'Italian' },
+  { code: 'pt',   label: 'Portuguese' },
+  { code: 'sv',   label: 'Swedish' },
+  { code: 'no',   label: 'Norwegian' },
+  { code: 'da',   label: 'Danish' },
+  { code: 'fi',   label: 'Finnish' },
+  { code: 'pl',   label: 'Polish' },
+  { code: 'ru',   label: 'Russian' },
+  { code: 'zh',   label: 'Chinese' },
+  { code: 'ja',   label: 'Japanese' },
+  { code: 'ko',   label: 'Korean' },
+  { code: 'ar',   label: 'Arabic' },
+];
+
+const SPEAKERS: { value: number | undefined; label: string }[] = [
+  { value: undefined, label: 'Auto' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 3, label: '3' },
+  { value: 4, label: '4' },
+  { value: 5, label: '5' },
+  { value: 6, label: '6' },
+  { value: 8, label: '8' },
+];
+
+const BACKENDS: { value: string; label: string }[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'cpu',  label: 'CPU' },
+  { value: 'cuda', label: 'CUDA (NVIDIA)' },
+  { value: 'mps',  label: 'MPS (Apple)' },
+];
+
 export function IdleScreen({ onTranscribe, recentFiles }: Props) {
   const [drag, setDrag] = useState(false);
+  const [language, setLanguage] = useState<string>('auto');
+  const [numSpeakers, setNumSpeakers] = useState<number | undefined>(undefined);
+  const [backend, setBackend] = useState<string>('auto');
+
+  const opts: TranscribeOpts = {
+    language,
+    num_speakers: numSpeakers,
+    backend,
+  };
 
   useEffect(() => {
     const unlistenPromise = getCurrentWebview().onDragDropEvent(event => {
@@ -23,11 +77,11 @@ export function IdleScreen({ onTranscribe, recentFiles }: Props) {
       } else if (event.payload.type === 'drop') {
         setDrag(false);
         const path = event.payload.paths?.[0];
-        if (path) onTranscribe(path);
+        if (path) onTranscribe(path, opts);
       }
     });
     return () => { unlistenPromise.then(fn => fn()).catch(() => {}); };
-  }, [onTranscribe]);
+  }, [onTranscribe, language, numSpeakers, backend]);
 
   const handleBrowse = async () => {
     const selected = await open({
@@ -36,9 +90,13 @@ export function IdleScreen({ onTranscribe, recentFiles }: Props) {
       filters: [{ name: 'Audio', extensions: ACCEPTED_EXTS }],
     });
     if (typeof selected === 'string') {
-      onTranscribe(selected);
+      onTranscribe(selected, opts);
     }
   };
+
+  const langLabel = LANGUAGES.find(l => l.code === language)?.label ?? 'Auto-detect';
+  const spkLabel = SPEAKERS.find(s => s.value === numSpeakers)?.label ?? 'Auto';
+  const backendLabel = BACKENDS.find(b => b.value === backend)?.label ?? 'Auto';
 
   return (
     <div className="idle">
@@ -62,18 +120,24 @@ export function IdleScreen({ onTranscribe, recentFiles }: Props) {
       </div>
 
       <div className="options-row">
-        <div className="option">
-          <div className="opt-label">Language</div>
-          <div className="opt-value">Auto-detect <span className="chev"><Icon name="chev" size={12} /></span></div>
-        </div>
-        <div className="option">
-          <div className="opt-label">Speakers</div>
-          <div className="opt-value">Auto <span className="chev"><Icon name="chev" size={12} /></span></div>
-        </div>
-        <div className="option">
-          <div className="opt-label">Backend</div>
-          <div className="opt-value">faster-whisper <span className="chev"><Icon name="chev" size={12} /></span></div>
-        </div>
+        <OptionSelect
+          label="Language"
+          value={langLabel}
+          options={LANGUAGES.map(l => ({ key: l.code, label: l.label, selected: l.code === language }))}
+          onSelect={(k) => setLanguage(k)}
+        />
+        <OptionSelect
+          label="Speakers"
+          value={spkLabel}
+          options={SPEAKERS.map(s => ({ key: s.value === undefined ? 'auto' : String(s.value), label: s.label, selected: s.value === numSpeakers }))}
+          onSelect={(k) => setNumSpeakers(k === 'auto' ? undefined : Number(k))}
+        />
+        <OptionSelect
+          label="Backend"
+          value={backendLabel}
+          options={BACKENDS.map(b => ({ key: b.value, label: b.label, selected: b.value === backend }))}
+          onSelect={(k) => setBackend(k)}
+        />
       </div>
 
       {recentFiles.length > 0 && (
@@ -104,6 +168,46 @@ export function IdleScreen({ onTranscribe, recentFiles }: Props) {
           a person who copies out documents. <em>From Latin</em> <b style={{fontWeight:500}}>scrībere</b>, <em>to write</em>. Privately, by hand, on your own page.
         </div>
       </div>
+    </div>
+  );
+}
+
+interface OptionItem { key: string; label: string; selected: boolean }
+
+function OptionSelect({ label, value, options, onSelect }: {
+  label: string;
+  value: string;
+  options: OptionItem[];
+  onSelect: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [open]);
+  return (
+    <div className="option" ref={ref} onClick={() => setOpen(o => !o)} style={{ cursor: 'default', position: 'relative' }}>
+      <div className="opt-label">{label}</div>
+      <div className="opt-value">{value} <span className="chev"><Icon name="chev" size={12} /></span></div>
+      {open && (
+        <div className="opt-menu" onClick={e => e.stopPropagation()}>
+          {options.map(o => (
+            <div
+              key={o.key}
+              className={'opt-menu-item' + (o.selected ? ' selected' : '')}
+              onClick={() => { onSelect(o.key); setOpen(false); }}
+            >
+              {o.label}
+              {o.selected && <span className="check"><Icon name="check" size={12} /></span>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

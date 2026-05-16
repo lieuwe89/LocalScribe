@@ -95,3 +95,11 @@ def stop_job(job_id: str) -> dict:
     if not ok:
         raise HTTPException(status_code=404, detail="job not recording or already stopped")
     return {"ok": True}
+
+
+@router.post("/jobs/{job_id}/cancel")
+def cancel_job(job_id: str) -> dict:
+    ok = runner.cancel_transcribe_job(job_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="job not active or already finished")
+    return {"ok": True}
