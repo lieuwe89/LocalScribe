@@ -5,6 +5,7 @@ import { Sidebar } from './chrome/Sidebar';
 import { MainHeader } from './chrome/MainHeader';
 import { IdleScreen } from './screens/IdleScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
+import { CompleteScreen } from './screens/CompleteScreen';
 import { useLibrary } from './stores/library';
 import { useTranscripts } from './stores/transcripts';
 import { startTranscribe } from './stores/jobs';
@@ -18,6 +19,8 @@ export default function App() {
   const refreshLibrary = useLibrary(s => s.refresh);
   const loadTranscript = useTranscripts(s => s.load);
   const recentItems = useLibrary(s => s.items.slice(0, 3));
+  const currentDoc = useTranscripts(s => (tid ? s.byId[tid] : undefined));
+  const relabel = useTranscripts(s => s.relabel);
 
   useEffect(() => { refreshLibrary().catch(() => {}); }, [refreshLibrary]);
 
@@ -50,7 +53,13 @@ export default function App() {
               }}
             />
           )}
-          {route !== 'idle' && route !== 'progress' && (
+          {route === 'complete' && tid && currentDoc && (
+            <CompleteScreen
+              doc={currentDoc}
+              onRelabel={async (m) => { await relabel(tid, m); }}
+            />
+          )}
+          {route !== 'idle' && route !== 'progress' && route !== 'complete' && (
             <pre>{route} (placeholder)</pre>
           )}
         </div>

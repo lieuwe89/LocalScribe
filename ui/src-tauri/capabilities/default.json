@@ -10,6 +10,7 @@
     {
       "identifier": "shell:allow-execute",
       "allow": [{ "name": "localscribe-sidecar", "sidecar": true }]
-    }
+    },
+    "shell:allow-open"
   ]
 }
