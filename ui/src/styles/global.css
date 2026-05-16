@@ -836,3 +836,18 @@ input, textarea { font-family: inherit; color: inherit; }
 .watch-events .evt .msg { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .watch-events .evt-error .kind { color: var(--danger); }
 .watch-events .evt-done .kind { color: var(--accent); }
+
+/* ─────────── Settings screen ─────────── */
+.settings { max-width: 600px; margin: 0 auto; padding: 36px 40px 80px; display: flex; flex-direction: column; gap: 16px; }
+.settings .banner { padding: 10px 14px; border-radius: 8px; font-size: 13px; }
+.settings .banner.warn { background: rgba(217, 119, 87, 0.12); border: 0.5px solid var(--warn); color: var(--warn); }
+.settings .field { display: grid; grid-template-columns: 160px 1fr; gap: 16px; align-items: center; }
+.settings .field .lbl { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim); }
+.settings .field input[type="text"], .settings .field input[type="password"], .settings .field input[type="number"], .settings .field input:not([type]), .settings .field select {
+  background: var(--bg); border: 0.5px solid var(--line-strong); color: var(--ink);
+  padding: 7px 10px; border-radius: 6px;
+  font-family: var(--sans); font-size: 13px; outline: none;
+}
+.settings .field input:focus, .settings .field select:focus { border-color: var(--accent-line); background: var(--bg-elev-2); }
+.settings .field input[type="checkbox"] { width: 16px; height: 16px; justify-self: start; }
+.settings-actions { margin-top: 10px; display: flex; justify-content: flex-end; }
