@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import './styles/global.css';
 import { Window } from './chrome/Window';
 import { Sidebar } from './chrome/Sidebar';
+import { MainHeader } from './chrome/MainHeader';
 import { useLibrary } from './stores/library';
 import type { Route } from './types/route';
 
@@ -16,7 +17,7 @@ export default function App() {
     <Window screenLabel={route}>
       <Sidebar route={route} setRoute={setRoute} currentTranscriptId={tid} setCurrentTranscriptId={setTid} />
       <div className="main">
-        <div className="main-header"><span className="title">{route}</span></div>
+        <MainHeader route={route} />
         <div className="main-body"><pre>{route}</pre></div>
       </div>
     </Window>
