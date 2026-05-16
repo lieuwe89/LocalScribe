@@ -644,3 +644,152 @@ input, textarea { font-family: inherit; color: inherit; }
 .transcript.density-compact { font-size: 14px; }
 
 .transcript.density-compact .turn { padding: 5px 0; }
+
+/* ─────────── RECORD ─────────── */
+.record {
+  height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 40px 40px 32px;
+  gap: 24px;
+  position: relative;
+}
+
+.device-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px 6px 14px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 100%;
+}
+.device-bar > * { flex-shrink: 0; }
+.device-bar .lbl { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); }
+.device-bar select {
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.scribe-canvas {
+  width: 100%;
+  max-width: 880px;
+  flex: 1;
+  min-height: 280px;
+  background:
+    radial-gradient(60% 90% at 50% 50%, var(--accent-faint), transparent 70%),
+    var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.scribe-canvas .baseline {
+  position: absolute;
+  left: 32px; right: 32px;
+  top: 50%;
+  height: 0.5px;
+  background: var(--line-strong);
+}
+.scribe-canvas .gridlines {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(to right, transparent 0, transparent calc(100% - 1px), var(--line-faint) 100%);
+  background-size: 80px 100%;
+}
+.scribe-canvas .time-marks {
+  position: absolute; left: 32px; right: 32px; bottom: 16px;
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 10px; color: var(--ink-faint);
+}
+
+.timer {
+  display: flex; align-items: baseline; gap: 14px;
+}
+.timer .big {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 56px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1;
+}
+.timer .ms {
+  font-family: var(--mono);
+  font-size: 18px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+.timer .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: flex; align-items: center; gap: 7px;
+}
+.timer .label::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-faint);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.timer.idle .label { color: var(--ink-dim); }
+.timer.idle .label::before { background: var(--ink-dim); box-shadow: none; animation: none; }
+.timer.paused .label { color: var(--warn); }
+.timer.paused .label::before { background: var(--warn); box-shadow: 0 0 0 4px rgba(217, 119, 87, 0.12); animation: none; }
+
+.record-controls {
+  display: flex; align-items: center; gap: 14px;
+}
+.btn-record {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  display: flex; align-items: center; justify-content: center;
+  cursor: default; position: relative;
+  transition: transform 0.1s, background 0.12s;
+}
+.btn-record:hover { background: var(--bg-hover); }
+.btn-record:active { transform: scale(0.96); }
+.btn-record .inner {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--danger);
+  transition: all 0.18s ease;
+}
+.btn-record.is-recording .inner {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  background: var(--danger);
+}
+.btn-secondary {
+  height: 38px; padding: 0 14px;
+  border-radius: 8px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line-strong);
+  color: var(--ink);
+  font-size: 12.5px;
+  cursor: default;
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono);
+}
+.btn-secondary:hover { background: var(--bg-hover); }
+.btn-secondary.danger { color: var(--danger); }
+
+.privacy-note {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-dim);
+  letter-spacing: 0.04em;
+  display: flex; align-items: center; gap: 8px;
+  text-align: center;
+}
