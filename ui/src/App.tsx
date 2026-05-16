@@ -7,6 +7,7 @@ import { IdleScreen } from './screens/IdleScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
 import { CompleteScreen } from './screens/CompleteScreen';
 import { RecordScreen } from './screens/RecordScreen';
+import { LibraryScreen } from './screens/LibraryScreen';
 import { useLibrary } from './stores/library';
 import { useTranscripts } from './stores/transcripts';
 import { startTranscribe, startRecord, stopRecord } from './stores/jobs';
@@ -105,7 +106,10 @@ export default function App() {
               onDiscard={() => { useRecording.getState().reset(); }}
             />
           )}
-          {route !== 'idle' && route !== 'progress' && route !== 'complete' && route !== 'record' && (
+          {route === 'library' && (
+            <LibraryScreen setRoute={setRoute} setTid={setTid} />
+          )}
+          {route !== 'idle' && route !== 'progress' && route !== 'complete' && route !== 'record' && route !== 'library' && (
             <pre>{route} (placeholder)</pre>
           )}
         </div>

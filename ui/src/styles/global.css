@@ -793,3 +793,31 @@ input, textarea { font-family: inherit; color: inherit; }
   display: flex; align-items: center; gap: 8px;
   text-align: center;
 }
+
+/* ─────────── Library screen ─────────── */
+.library { max-width: 920px; margin: 0 auto; padding: 36px 40px 80px; display: flex; flex-direction: column; gap: 22px; }
+.lib-search {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-elev); border: 0.5px solid var(--line); border-radius: 6px;
+  padding: 8px 12px;
+}
+.lib-search .ico { color: var(--ink-dim); display: flex; }
+.lib-search input { flex: 1; background: transparent; border: none; outline: none; color: var(--ink); font-family: var(--sans); font-size: 13px; }
+.lib-empty { text-align: center; padding: 60px 20px; font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--ink-muted); }
+.lib-list { display: flex; flex-direction: column; }
+.lib-row {
+  display: grid;
+  grid-template-columns: 22px 1fr 60px 100px 40px 90px 22px 16px;
+  align-items: center; gap: 14px;
+  padding: 12px 6px;
+  border-bottom: 0.5px solid var(--line-faint);
+  cursor: default; font-size: 13px;
+}
+.lib-row:hover { background: var(--bg-hover); }
+.lib-row .ico { color: var(--ink-dim); }
+.lib-row .name { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-row .dur, .lib-row .spk, .lib-row .lang, .lib-row .when { font-family: var(--mono); font-size: 11.5px; color: var(--ink-dim); }
+.lib-row .status { color: var(--accent); }
+.lib-row.has-error .status { color: var(--warn); }
+.lib-row.has-error .name { color: var(--ink-muted); }
+.lib-row .chev { color: var(--ink-faint); display: flex; }
