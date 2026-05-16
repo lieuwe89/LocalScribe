@@ -9,8 +9,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 
 from speechtotext.ingest.mic import _install_stop_signals, record_to_wav
+
+_SKIP_SIGNALS = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="os.kill(SIGTERM/SIGINT) calls TerminateProcess on Windows, not the Python handler",
+)
 
 
 def test_record_writes_wav(tmp_path: Path):
@@ -36,6 +42,7 @@ def test_record_writes_wav(tmp_path: Path):
     assert sf_handle.write.call_count == 2
 
 
+@_SKIP_SIGNALS
 def test_install_stop_signals_sets_event_on_sigterm():
     """Verify SIGTERM into the registered handler sets stop_event."""
     stop = threading.Event()
@@ -48,6 +55,7 @@ def test_install_stop_signals_sets_event_on_sigterm():
         assert stop.is_set(), "SIGTERM should have set the stop_event"
 
 
+@_SKIP_SIGNALS
 def test_install_stop_signals_sets_event_on_sigint():
     stop = threading.Event()
     with _install_stop_signals(stop):
@@ -56,6 +64,7 @@ def test_install_stop_signals_sets_event_on_sigint():
         assert stop.is_set(), "SIGINT should have set the stop_event"
 
 
+@_SKIP_SIGNALS
 def test_install_stop_signals_restores_handlers():
     """Prior handler should be restored after the context manager exits."""
     sentinel_called: list[bool] = []
@@ -77,6 +86,7 @@ def test_install_stop_signals_restores_handlers():
         signal.signal(signal.SIGTERM, original)
 
 
+@_SKIP_SIGNALS
 def test_install_stop_signals_skips_in_worker_thread():
     """signal.signal raises ValueError off the main thread; we swallow it."""
     error: list[BaseException] = []
@@ -96,6 +106,7 @@ def test_install_stop_signals_skips_in_worker_thread():
     assert error == []
 
 
+@_SKIP_SIGNALS
 def test_record_to_wav_survives_sigterm_with_valid_header(tmp_path: Path):
     """End-to-end: a child process recording to a file should produce a valid
     WAV header even when killed with SIGTERM mid-loop. Uses mocked audio I/O
