@@ -36,14 +36,14 @@ SCHEMA_VERSION = 1
 
 
 def default_app_data_dir() -> Path:
-    """Platform-appropriate writable app-data dir for LocalScribe."""
+    """Platform-appropriate writable app-data dir for LocalLexis."""
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "localscribe"
+        return Path.home() / "Library" / "Application Support" / "locallexis"
     if sys.platform == "win32":
         base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-        return Path(base) / "localscribe"
+        return Path(base) / "locallexis"
     base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-    return Path(base) / "localscribe"
+    return Path(base) / "locallexis"
 
 
 def default_db_path() -> Path:

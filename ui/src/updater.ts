@@ -13,7 +13,7 @@ export async function checkForUpdates(silent = false): Promise<void> {
   if (!update?.available) return;
 
   const proceed = await ask(
-    `LocalScribe ${update.version} is available.\n\n${update.body ?? ''}`.trim(),
+    `LocalLexis ${update.version} is available.\n\n${update.body ?? ''}`.trim(),
     { title: 'Update available', kind: 'info', okLabel: 'Install and restart', cancelLabel: 'Later' },
   );
   if (!proceed) return;

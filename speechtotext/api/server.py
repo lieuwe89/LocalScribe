@@ -20,6 +20,6 @@ def pick_port() -> int:
 def run(host: str = "127.0.0.1", port: int | None = None, print_handshake: bool = True) -> None:
     p = port or pick_port()
     if print_handshake:
-        sys.stdout.write(json.dumps({"localscribe": {"host": host, "port": p}}) + "\n")
+        sys.stdout.write(json.dumps({"locallexis": {"host": host, "port": p}}) + "\n")
         sys.stdout.flush()
     uvicorn.run(create_app(), host=host, port=p, log_level="warning")

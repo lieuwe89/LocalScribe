@@ -13,7 +13,7 @@
     },
     {
       "identifier": "shell:allow-execute",
-      "allow": [{ "name": "localscribe-sidecar", "sidecar": true }]
+      "allow": [{ "name": "locallexis-sidecar", "sidecar": true }]
     },
     "shell:allow-open",
     "updater:default",

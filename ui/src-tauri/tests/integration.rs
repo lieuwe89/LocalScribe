@@ -5,7 +5,7 @@
 //!     cargo test --manifest-path ui/src-tauri/Cargo.toml --release -- --test-threads=1
 //!
 //! Requires the binary at:
-//!     ui/src-tauri/binaries/localscribe-sidecar-<host-triple>
+//!     ui/src-tauri/binaries/locallexis-sidecar-<host-triple>
 
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
@@ -22,9 +22,9 @@ fn target_triple() -> &'static str {
 fn binary_path() -> std::path::PathBuf {
     let triple = target_triple();
     let name = if cfg!(windows) {
-        format!("localscribe-sidecar-{}.exe", triple)
+        format!("locallexis-sidecar-{}.exe", triple)
     } else {
-        format!("localscribe-sidecar-{}", triple)
+        format!("locallexis-sidecar-{}", triple)
     };
     let here = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     here.join("binaries").join(name)
@@ -35,7 +35,7 @@ fn sidecar_starts_responds_to_health_then_exits() {
     let binary = binary_path();
     assert!(
         binary.exists(),
-        "sidecar binary missing at {} — build it with `pyinstaller packaging/localscribe-sidecar.spec --clean` then copy into ui/src-tauri/binaries/",
+        "sidecar binary missing at {} — build it with `pyinstaller packaging/locallexis-sidecar.spec --clean` then copy into ui/src-tauri/binaries/",
         binary.display()
     );
 
@@ -60,7 +60,7 @@ fn sidecar_starts_responds_to_health_then_exits() {
         }
         let Ok(line) = line else { continue };
         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
-            if let Some(port) = parsed.get("localscribe").and_then(|v| v.get("port")).and_then(|v| v.as_u64()) {
+            if let Some(port) = parsed.get("locallexis").and_then(|v| v.get("port")).and_then(|v| v.as_u64()) {
                 url = Some(format!("http://127.0.0.1:{}", port));
                 break;
             }

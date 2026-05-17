@@ -20,7 +20,7 @@ from speechtotext.config import load_config
 
 
 def create_app(library_db_path: Path | None = None) -> FastAPI:
-    app = FastAPI(title="LocalScribe", version="0.1.0")
+    app = FastAPI(title="LocalLexis", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^(tauri://.*|https?://(localhost|127\.0\.0\.1)(:\d+)?)$",

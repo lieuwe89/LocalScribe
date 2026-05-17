@@ -1,4 +1,4 @@
-# LocalScribe — session handoff & roadmap
+# LocalLexis — session handoff & roadmap
 
 Snapshot for the next Claude session (or any human picking this up cold).
 Last updated: v0.6.0 (2026-05-17).
@@ -7,7 +7,7 @@ Last updated: v0.6.0 (2026-05-17).
 
 ## TL;DR
 
-LocalScribe is a privacy-first on-device transcription app:
+LocalLexis is a privacy-first on-device transcription app:
 
 - **UI**: Tauri 2 (Rust shell + React/TypeScript webview) — [ui/](../ui)
 - **Backend "sidecar"**: a FastAPI Python process bundled with PyInstaller,
@@ -31,8 +31,8 @@ artifacts still publish to releases. The auto-updater picks them up.
 ┌──────────────────────────────────────────────────────────────────┐
 │  Tauri shell (Rust, ui/src-tauri/src/)                           │
 │    - spawns sidecar via tauri-plugin-shell                       │
-│    - passes env vars: PATH (+Homebrew), LOCALSCRIBE_BUNDLED_MODELS│
-│    - reads handshake JSON {"localscribe":{"port":N}} from stdout │
+│    - passes env vars: PATH (+Homebrew), LOCALLEXIS_BUNDLED_MODELS│
+│    - reads handshake JSON {"locallexis":{"port":N}} from stdout │
 │    - exposes sidecar_url() invoke to frontend                    │
 └──────────────────────────────────────────────────────────────────┘
                           │ spawns
@@ -79,7 +79,7 @@ artifacts still publish to releases. The auto-updater picks them up.
 | [api/warmup.py](../speechtotext/api/warmup.py) | Background mic permission primer |
 | [api/routes_*.py](../speechtotext/api/) | One module per resource: jobs, transcripts, models, devices, config, watch |
 | [pipeline.py](../speechtotext/pipeline.py) | ingest → asr → diarize → merge → write; accepts `cancel_event` + per-stage `ProgressEvent` |
-| [asr/faster_whisper.py](../speechtotext/asr/faster_whisper.py) | FasterWhisperASR; resolves `LOCALSCRIBE_BUNDLED_MODELS` → local model path |
+| [asr/faster_whisper.py](../speechtotext/asr/faster_whisper.py) | FasterWhisperASR; resolves `LOCALLEXIS_BUNDLED_MODELS` → local model path |
 | [diarize/pyannote.py](../speechtotext/diarize/pyannote.py) | PyannoteDiarizer; pre-loads WAV with soundfile to bypass torchcodec |
 | [ingest/file.py](../speechtotext/ingest/file.py) | `normalize_to_wav` via ffmpeg with PATH-fallback list |
 | [ingest/mic.py](../speechtotext/ingest/mic.py) | sounddevice/soundfile recording loop with SIGINT/SIGTERM handlers |
@@ -93,7 +93,7 @@ artifacts still publish to releases. The auto-updater picks them up.
 |---|---|
 | [src/lib.rs](../ui/src-tauri/src/lib.rs) | Tauri app builder, plugin registration, sidecar spawn, window-close cleanup |
 | [src/sidecar.rs](../ui/src-tauri/src/sidecar.rs) | Spawns sidecar, sets PATH/models env, parses handshake, exposes `sidecar_url` cmd |
-| [tauri.conf.json](../ui/src-tauri/tauri.conf.json) | Bundle config; ships `resources/models/**/*` and `binaries/localscribe-sidecar` |
+| [tauri.conf.json](../ui/src-tauri/tauri.conf.json) | Bundle config; ships `resources/models/**/*` and `binaries/locallexis-sidecar` |
 | [capabilities/default.json](../ui/src-tauri/capabilities/default.json) | Plugin ACL (shell, opener, updater, dialog, process) — has `opener:allow-open-path` for transcript files |
 
 ### Frontend (`ui/src/`)
@@ -114,7 +114,7 @@ artifacts still publish to releases. The auto-updater picks them up.
 
 | File | What it does |
 |---|---|
-| [packaging/localscribe-sidecar.spec](../packaging/localscribe-sidecar.spec) | PyInstaller spec; bundles pyannote.audio.models submodules, faster_whisper assets, torchcodec dylibs |
+| [packaging/locallexis-sidecar.spec](../packaging/locallexis-sidecar.spec) | PyInstaller spec; bundles pyannote.audio.models submodules, faster_whisper assets, torchcodec dylibs |
 | [scripts/download_bundled_models.py](../scripts/download_bundled_models.py) | Idempotent HF snapshot fetcher; populates `ui/src-tauri/resources/models/` for bundling |
 | [.github/workflows/build-sidecar.yml](../.github/workflows/build-sidecar.yml) | Per-platform sidecar build (artifact only) |
 | [.github/workflows/build-app.yml](../.github/workflows/build-app.yml) | Full installer build via tauri-action; runs the model-download script before bundling |
@@ -139,16 +139,16 @@ cd ui/src-tauri && cargo check
 Sidecar binary rebuild (Python changes):
 
 ```bash
-.venv/bin/pyinstaller packaging/localscribe-sidecar.spec --clean
+.venv/bin/pyinstaller packaging/locallexis-sidecar.spec --clean
 # Use a fresh-inode move to dodge macOS launch-failure caching:
-cp dist/localscribe-sidecar /tmp/sc-fresh-$$
-mv /tmp/sc-fresh-$$ ui/src-tauri/binaries/localscribe-sidecar-aarch64-apple-darwin
+cp dist/locallexis-sidecar /tmp/sc-fresh-$$
+mv /tmp/sc-fresh-$$ ui/src-tauri/binaries/locallexis-sidecar-aarch64-apple-darwin
 ```
 
 End-to-end smoke test (skips Tauri, hits sidecar directly):
 
 ```bash
-ui/src-tauri/binaries/localscribe-sidecar-aarch64-apple-darwin > /tmp/sc.log 2>&1 &
+ui/src-tauri/binaries/locallexis-sidecar-aarch64-apple-darwin > /tmp/sc.log 2>&1 &
 # wait ~30-45s for handshake to appear in /tmp/sc.log, grab the port
 curl -sS -X POST "http://127.0.0.1:$PORT/jobs/transcribe" \
   -H 'Content-Type: application/json' \
@@ -229,7 +229,7 @@ The schema is ready (`chunks`, `embeddings` tables exist). To turn it on:
 - Backend choice: `sentence-transformers/all-MiniLM-L6-v2` (80 MB) or
   `BAAI/bge-small-en-v1.5` (130 MB). Bundle the chosen one the same way
   as base.en (see [scripts/download_bundled_models.py](../scripts/download_bundled_models.py)).
-- Add `LOCALSCRIBE_BUNDLED_EMBED_MODEL` env (mirrors ASR pattern).
+- Add `LOCALLEXIS_BUNDLED_EMBED_MODEL` env (mirrors ASR pattern).
 - Trigger after transcribe completion (re-use the `on_complete_dir` hook).
 - Status surfaced via new `/models/embed` endpoint mirroring `/models/whisper`.
 
@@ -264,7 +264,7 @@ The schema is ready (`chunks`, `embeddings` tables exist). To turn it on:
 2. **macOS UE zombies.** PyInstaller-bundled processes can get stuck in
    "U" (uninterruptible) "E" (exiting) state during low-disk or quarantine
    scan conditions. They cannot be killed; only a reboot clears them. Kill
-   the parent `pgrep -fl localscribe` chain proactively when iterating.
+   the parent `pgrep -fl locallexis` chain proactively when iterating.
 
 3. **PyInstaller `_MEI*` temp dirs leak.** Each sidecar launch extracts
    ~600 MB to `/var/folders/.../T/_MEI*`. Stuck processes don't clean up.

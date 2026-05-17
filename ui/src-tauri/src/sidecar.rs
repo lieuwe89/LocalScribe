@@ -45,13 +45,13 @@ fn locate_bundled_models(app: &AppHandle) -> Option<PathBuf> {
 pub fn spawn(app: &AppHandle) -> Result<(), String> {
     let mut env: HashMap<String, String> = HashMap::new();
     if let Some(models_dir) = locate_bundled_models(app) {
-        eprintln!("[localscribe] bundled models: {}", models_dir.display());
+        eprintln!("[locallexis] bundled models: {}", models_dir.display());
         env.insert(
-            "LOCALSCRIBE_BUNDLED_MODELS".to_string(),
+            "LOCALLEXIS_BUNDLED_MODELS".to_string(),
             models_dir.to_string_lossy().to_string(),
         );
     } else {
-        eprintln!("[localscribe] bundled models: not found (will download on demand)");
+        eprintln!("[locallexis] bundled models: not found (will download on demand)");
     }
 
     // GUI-launched macOS apps get a stripped PATH that excludes Homebrew.
@@ -70,7 +70,7 @@ pub fn spawn(app: &AppHandle) -> Result<(), String> {
 
     let sidecar = app
         .shell()
-        .sidecar("localscribe-sidecar")
+        .sidecar("locallexis-sidecar")
         .map_err(|e| e.to_string())?
         .envs(env);
 
@@ -85,7 +85,7 @@ pub fn spawn(app: &AppHandle) -> Result<(), String> {
                 let text = String::from_utf8_lossy(&line);
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text) {
                     if let Some(p) = parsed
-                        .get("localscribe")
+                        .get("locallexis")
                         .and_then(|v| v.get("port"))
                         .and_then(|v| v.as_u64())
                     {

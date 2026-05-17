@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Lets the user point LocalScribe at a directory and automatically transcribe any new audio files that appear there.
+Lets the user point LocalLexis at a directory and automatically transcribe any new audio files that appear there.
 
 ## Layout
 

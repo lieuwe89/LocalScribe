@@ -1,11 +1,11 @@
-# LocalScribe — desktop UI design
+# LocalLexis — desktop UI design
 
 Cross-platform desktop app for the existing `stt` CLI. Wraps the
 `speechtotext` Python package in a Tauri shell with full feature
 parity plus a transcript library, leaving room for Phase 2
 summarize and RAG search.
 
-Product name: **LocalScribe** (`/ˈloʊkəlˌskraɪb/`). The brand is
+Product name: **LocalLexis** (`/ˈloʊkəlˌskraɪb/`). The brand is
 manuscript-themed — ink, scribe, marginalia — and the dominant
 product signal is privacy: nothing leaves the machine.
 
@@ -33,12 +33,12 @@ product signal is privacy: nothing leaves the machine.
 
 The complete visual design (layout, typography, color tokens, copy,
 component structure) is defined in the handoff under
-[docs/design_handoff_localscribe/](../../design_handoff_localscribe/).
+[docs/design_handoff_locallexis/](../../design_handoff_locallexis/).
 That folder contains:
 
 - `README.md` — narrative handoff: what's high-fi, what's stub,
   every screen's layout in precise detail.
-- `LocalScribe-standalone.html` — runnable prototype (double-click
+- `LocalLexis-standalone.html` — runnable prototype (double-click
   to open offline).
 - `app.jsx`, `sidebar.jsx`, `screens.jsx`, `primitives.jsx`,
   `tweaks-panel.jsx` — split source for the prototype.
@@ -114,7 +114,7 @@ states each one needs to wire up.
 
 ### Sidebar (constant)
 
-- Brand block: "LocalScribe" wordmark + pronunciation guide.
+- Brand block: "LocalLexis" wordmark + pronunciation guide.
 - `+ New transcription` primary button (`⌘N`).
 - Nav: Transcribe · Record · Watch folder · Library (count badge)
   · Settings. Active item shows an accent-green marginalia tick.
@@ -185,7 +185,7 @@ arrive over SSE.
 ### Design tokens
 
 The full token list lives in
-[docs/design_handoff_localscribe/styles.css](../../design_handoff_localscribe/styles.css)
+[docs/design_handoff_locallexis/styles.css](../../design_handoff_locallexis/styles.css)
 and the handoff README. Production should expose them as CSS custom
 properties on `:root` (or the equivalent in the chosen styling
 system) and never hardcode hex values.
@@ -385,7 +385,7 @@ Redux Toolkit, plain Context) is a planning-time decision.
 
 Each "design X, then build it" step produces a short design note
 (or screenshot annotation) committed under
-`docs/design_handoff_localscribe/` before that build step starts,
+`docs/design_handoff_locallexis/` before that build step starts,
 so the high-fi reference stays complete as the app grows.
 
 ## Open questions

@@ -24,7 +24,7 @@ _WHISPER_MODELS: tuple[tuple[str, int], ...] = (
 
 
 def _bundled_dir_for(name: str) -> Path | None:
-    root = os.environ.get("LOCALSCRIBE_BUNDLED_MODELS")
+    root = os.environ.get("LOCALLEXIS_BUNDLED_MODELS")
     if not root:
         return None
     cand = Path(root) / f"faster-whisper-{name}"

@@ -27,8 +27,8 @@ jobs:
         run: choco install -y ffmpeg
       - run: pip install -e ".[api,packaging,dev]"
       - run: pytest -m "not integration"
-      - run: pyinstaller packaging/localscribe-sidecar.spec --clean
+      - run: pyinstaller packaging/locallexis-sidecar.spec --clean
       - uses: actions/upload-artifact@v4
         with:
-          name: localscribe-sidecar-${{ runner.os }}
-          path: dist/localscribe-sidecar*
+          name: locallexis-sidecar-${{ runner.os }}
+          path: dist/locallexis-sidecar*

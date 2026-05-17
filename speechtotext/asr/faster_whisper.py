@@ -13,11 +13,11 @@ from speechtotext.models import Segment
 def _resolve_bundled_model(name: str) -> str | None:
     """Look for a bundled faster-whisper model dir matching `name`.
 
-    Searched env var `LOCALSCRIBE_BUNDLED_MODELS` (set by the Tauri shell) for
+    Searched env var `LOCALLEXIS_BUNDLED_MODELS` (set by the Tauri shell) for
     a subdirectory named `faster-whisper-<name>`. Returns its absolute path if
     it contains a model.bin, else None.
     """
-    root = os.environ.get("LOCALSCRIBE_BUNDLED_MODELS")
+    root = os.environ.get("LOCALLEXIS_BUNDLED_MODELS")
     if not root:
         return None
     candidate = Path(root) / f"faster-whisper-{name}"

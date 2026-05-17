@@ -1,8 +1,8 @@
-# LocalScribe Desktop UI Implementation Plan
+# LocalLexis Desktop UI Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship LocalScribe — a cross-platform desktop app (macOS/Windows/Linux) that wraps the existing `stt` CLI with a Tauri + React UI, exposing every CLI workflow plus a transcript library, on top of a bundled FastAPI sidecar.
+**Goal:** Ship LocalLexis — a cross-platform desktop app (macOS/Windows/Linux) that wraps the existing `stt` CLI with a Tauri + React UI, exposing every CLI workflow plus a transcript library, on top of a bundled FastAPI sidecar.
 
 **Architecture:** Three layers. (1) Tauri shell + React/Vite frontend. (2) FastAPI sidecar bundled as a PyInstaller binary, started by Tauri at launch and killed on quit. (3) Existing `speechtotext` package, consumed unchanged. Frontend ↔ sidecar over `localhost:<random>` via REST + Server-Sent Events. `.json` sidecar files on disk remain the source of truth.
 
@@ -10,7 +10,7 @@
 
 **Reference Spec:** `docs/superpowers/specs/2026-05-15-stt-desktop-ui-design.md`
 
-**Design handoff:** `docs/design_handoff_localscribe/` — open `LocalScribe-standalone.html` to see the live prototype. `styles.css` + the `*.jsx` files are the canonical references for visual recreation.
+**Design handoff:** `docs/design_handoff_locallexis/` — open `LocalLexis-standalone.html` to see the live prototype. `styles.css` + the `*.jsx` files are the canonical references for visual recreation.
 
 ---
 
@@ -47,7 +47,7 @@ SpeechToText/
 │   │   └── server.py                    # `stt serve` entrypoint
 │   └── cli.py                           # add `serve` subcommand
 ├── packaging/
-│   ├── localscribe-sidecar.spec         # PyInstaller spec
+│   ├── locallexis-sidecar.spec         # PyInstaller spec
 │   └── README.md
 ├── tests/api/
 │   ├── conftest.py
@@ -97,7 +97,7 @@ SpeechToText/
 │   │       ├── LibraryScreen.tsx
 │   │       ├── WatchScreen.tsx
 │   │       └── SettingsScreen.tsx
-└── docs/design_handoff_localscribe/
+└── docs/design_handoff_locallexis/
     └── progress-screen.md               # design notes added during plan
     └── library-screen.md
     └── watch-screen.md
@@ -451,7 +451,7 @@ from speechtotext.api.jobs import JobRegistry
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="LocalScribe", version="0.1.0")
+    app = FastAPI(title="LocalLexis", version="0.1.0")
     app.state.jobs = JobRegistry()
 
     @app.get("/health")
@@ -1734,7 +1734,7 @@ def pick_port() -> int:
 def run(host: str = "127.0.0.1", port: int | None = None, print_handshake: bool = True) -> None:
     p = port or pick_port()
     if print_handshake:
-        sys.stdout.write(json.dumps({"localscribe": {"host": host, "port": p}}) + "\n")
+        sys.stdout.write(json.dumps({"locallexis": {"host": host, "port": p}}) + "\n")
         sys.stdout.flush()
     uvicorn.run(create_app(), host=host, port=p, log_level="warning")
 ```
@@ -1749,7 +1749,7 @@ def serve(
     host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
     port: Annotated[int | None, typer.Option("--port")] = None,
 ) -> None:
-    """Run the LocalScribe HTTP API."""
+    """Run the LocalLexis HTTP API."""
     from speechtotext.api.server import run as _run
     _run(host=host, port=port)
 ```
@@ -1761,7 +1761,7 @@ pytest tests/api/test_server.py -v
 # manual smoke:
 stt serve --port 8765 &  # then curl http://127.0.0.1:8765/health
 git add speechtotext tests/api/test_server.py
-git commit -m "feat(cli): 'stt serve' starts the LocalScribe HTTP API"
+git commit -m "feat(cli): 'stt serve' starts the LocalLexis HTTP API"
 ```
 
 ---
@@ -1771,7 +1771,7 @@ git commit -m "feat(cli): 'stt serve' starts the LocalScribe HTTP API"
 ### Task 12: PyInstaller spec for the sidecar binary
 
 **Files:**
-- Create: `packaging/localscribe-sidecar.spec`
+- Create: `packaging/locallexis-sidecar.spec`
 - Create: `packaging/README.md`
 - Modify: `pyproject.toml` (add packaging extra)
 
@@ -1789,12 +1789,12 @@ Run: `pip install -e ".[packaging]"`
 
 - [ ] **Step 2: Write spec file**
 
-`packaging/localscribe-sidecar.spec`:
+`packaging/locallexis-sidecar.spec`:
 
 ```python
-# PyInstaller spec for the LocalScribe FastAPI sidecar.
-# Build:   pyinstaller packaging/localscribe-sidecar.spec --clean
-# Output:  dist/localscribe-sidecar (or .exe on Windows)
+# PyInstaller spec for the LocalLexis FastAPI sidecar.
+# Build:   pyinstaller packaging/locallexis-sidecar.spec --clean
+# Output:  dist/locallexis-sidecar (or .exe on Windows)
 # The Tauri shell ships this binary alongside the app.
 
 a = Analysis(
@@ -1814,7 +1814,7 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, a.binaries, a.datas,
-    name='localscribe-sidecar',
+    name='locallexis-sidecar',
     debug=False,
     strip=False,
     upx=False,
@@ -1838,33 +1838,33 @@ if __name__ == "__main__":
 `packaging/README.md`:
 
 ```markdown
-# LocalScribe sidecar packaging
+# LocalLexis sidecar packaging
 
 Build the FastAPI sidecar as a standalone binary:
 
     pip install -e ".[api,packaging]"
-    pyinstaller packaging/localscribe-sidecar.spec --clean
+    pyinstaller packaging/locallexis-sidecar.spec --clean
 
-Output: `dist/localscribe-sidecar` (Linux/macOS) or `dist/localscribe-sidecar.exe` (Windows).
+Output: `dist/locallexis-sidecar` (Linux/macOS) or `dist/locallexis-sidecar.exe` (Windows).
 
 Note: pyannote + torch are heavy. Expect 600–900 MB.
 Run a smoke test:
 
-    ./dist/localscribe-sidecar &
+    ./dist/locallexis-sidecar &
     curl http://127.0.0.1:<port>/health    # port comes from the JSON handshake
 ```
 
 - [ ] **Step 5: Local smoke + commit**
 
 ```bash
-pyinstaller packaging/localscribe-sidecar.spec --clean
-./dist/localscribe-sidecar &
+pyinstaller packaging/locallexis-sidecar.spec --clean
+./dist/locallexis-sidecar &
 SIDECAR_PID=$!
 sleep 2
 # Read the JSON handshake from stdout to find the port (this step manual for now)
 kill $SIDECAR_PID
 git add packaging speechtotext/api/__main__.py pyproject.toml
-git commit -m "build: PyInstaller spec for LocalScribe sidecar binary"
+git commit -m "build: PyInstaller spec for LocalLexis sidecar binary"
 ```
 
 ---
@@ -1904,11 +1904,11 @@ jobs:
         run: choco install -y ffmpeg
       - run: pip install -e ".[api,packaging,dev]"
       - run: pytest -m "not integration"
-      - run: pyinstaller packaging/localscribe-sidecar.spec --clean
+      - run: pyinstaller packaging/locallexis-sidecar.spec --clean
       - uses: actions/upload-artifact@v4
         with:
-          name: localscribe-sidecar-${{ runner.os }}
-          path: dist/localscribe-sidecar*
+          name: locallexis-sidecar-${{ runner.os }}
+          path: dist/locallexis-sidecar*
 ```
 
 - [ ] **Step 2: Push branch, verify all three runners succeed, then commit on main**
@@ -1944,7 +1944,7 @@ From the project root:
 
 ```bash
 cd /Users/lieuwejongsma/SpeechToText
-cargo create-tauri-app --manager pnpm --template react-ts --identifier dev.localscribe.app --name localscribe ui
+cargo create-tauri-app --manager pnpm --template react-ts --identifier dev.locallexis.app --name locallexis ui
 cd ui && pnpm install
 ```
 
@@ -1964,7 +1964,7 @@ Edit `ui/src/App.tsx` to:
 import './styles/global.css';
 
 export default function App() {
-  return <div className="stage">LocalScribe</div>;
+  return <div className="stage">LocalLexis</div>;
 }
 ```
 
@@ -2001,7 +2001,7 @@ git commit -m "feat(ui): scaffold Tauri + Vite + React + TS, strip template"
 
 - [ ] **Step 1: Tokens**
 
-Copy `:root { ... }` block from [docs/design_handoff_localscribe/styles.css](../../design_handoff_localscribe/styles.css) lines 1–39 into `ui/src/styles/tokens.css` verbatim.
+Copy `:root { ... }` block from [docs/design_handoff_locallexis/styles.css](../../design_handoff_locallexis/styles.css) lines 1–39 into `ui/src/styles/tokens.css` verbatim.
 
 - [ ] **Step 2: Global**
 
@@ -2023,7 +2023,7 @@ Edit `ui/index.html` head:
 cd ui && pnpm tauri dev
 ```
 
-The "LocalScribe" text should render in Geist on a dark `#050506` page.
+The "LocalLexis" text should render in Geist on a dark `#050506` page.
 
 - [ ] **Step 5: Commit**
 
@@ -2055,10 +2055,10 @@ serde_json = "1"
 
 - [ ] **Step 2: Bundle sidecar binary**
 
-Place the built `localscribe-sidecar` binary at `ui/src-tauri/binaries/localscribe-sidecar-<target-triple>` (e.g. `aarch64-apple-darwin`). Edit `ui/src-tauri/tauri.conf.json` `tauri.bundle.externalBin`:
+Place the built `locallexis-sidecar` binary at `ui/src-tauri/binaries/locallexis-sidecar-<target-triple>` (e.g. `aarch64-apple-darwin`). Edit `ui/src-tauri/tauri.conf.json` `tauri.bundle.externalBin`:
 
 ```json
-"externalBin": ["binaries/localscribe-sidecar"]
+"externalBin": ["binaries/locallexis-sidecar"]
 ```
 
 - [ ] **Step 3: Sidecar manager (Rust)**
@@ -2078,7 +2078,7 @@ pub fn sidecar_url(state: tauri::State<SidecarUrl>) -> Option<String> {
 }
 
 pub fn spawn(app: &tauri::AppHandle) -> Result<(), String> {
-    let (mut rx, _child) = Command::new_sidecar("localscribe-sidecar")
+    let (mut rx, _child) = Command::new_sidecar("locallexis-sidecar")
         .map_err(|e| e.to_string())?
         .spawn()
         .map_err(|e| e.to_string())?;
@@ -2088,7 +2088,7 @@ pub fn spawn(app: &tauri::AppHandle) -> Result<(), String> {
         while let Some(event) = rx.recv().await {
             if let CommandEvent::Stdout(line) = event {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
-                    if let Some(p) = parsed.get("localscribe").and_then(|v| v.get("port")).and_then(|v| v.as_u64()) {
+                    if let Some(p) = parsed.get("locallexis").and_then(|v| v.get("port")).and_then(|v| v.as_u64()) {
                         *url.lock().unwrap() = Some(format!("http://127.0.0.1:{}", p));
                     }
                 }
@@ -2559,7 +2559,7 @@ test('unknown icon name renders nothing', () => {
 export const SPEAKER_COLORS = ['#6fd99a', '#e8b169', '#7aa5e8', '#d97e94', '#c2a3e8'] as const;
 ```
 
-`ui/src/primitives/Icon.tsx`: port the `switch (name)` body from [docs/design_handoff_localscribe/primitives.jsx](../../design_handoff_localscribe/primitives.jsx) verbatim, adapted to TS:
+`ui/src/primitives/Icon.tsx`: port the `switch (name)` body from [docs/design_handoff_locallexis/primitives.jsx](../../design_handoff_locallexis/primitives.jsx) verbatim, adapted to TS:
 
 ```tsx
 export type IconName =
@@ -2616,7 +2616,7 @@ Recreate the handoff sidebar (brand, +New, nav, Recent, footer) and the macOS-st
 
 - [ ] **Step 1: Port sidebar+window CSS**
 
-Append to `ui/src/styles/global.css` the relevant blocks from [docs/design_handoff_localscribe/styles.css](../../design_handoff_localscribe/styles.css):
+Append to `ui/src/styles/global.css` the relevant blocks from [docs/design_handoff_locallexis/styles.css](../../design_handoff_locallexis/styles.css):
 - `.stage`, `.window`, `.titlebar` and child rules (lines ~73–127)
 - `.app`, `.sidebar`, `.brand`, `.new-btn`, `.nav`, `.nav-item`, `.section-label`, `.recent-list`, `.recent-item`, `.sidebar-footer` (lines ~128–293)
 - `.main`, `.main-header`, `.chip`, `.main-body` (lines ~295–352)
@@ -2634,7 +2634,7 @@ export type Route = 'idle' | 'progress' | 'complete' | 'record' | 'library' | 'w
 
 - [ ] **Step 3: Sidebar component**
 
-`ui/src/chrome/Sidebar.tsx`: adapt [docs/design_handoff_localscribe/sidebar.jsx](../../design_handoff_localscribe/sidebar.jsx) to TSX. Replace mock data with `useLibrary` recent items (slice top 5) and the `useRecording` `active` flag for the Record nav `.live-dot`. Click on a recent item should `setRoute('complete')` and load that transcript via the `useTranscripts` store.
+`ui/src/chrome/Sidebar.tsx`: adapt [docs/design_handoff_locallexis/sidebar.jsx](../../design_handoff_locallexis/sidebar.jsx) to TSX. Replace mock data with `useLibrary` recent items (slice top 5) and the `useRecording` `active` flag for the Record nav `.live-dot`. Click on a recent item should `setRoute('complete')` and load that transcript via the `useTranscripts` store.
 
 ```tsx
 import { Icon, type IconName } from '../primitives/Icon';
@@ -2664,7 +2664,7 @@ export function Sidebar({ route, setRoute, currentTranscriptId, setCurrentTransc
   return (
     <div className="sidebar">
       <div className="brand">
-        <div className="wordmark">LocalScribe</div>
+        <div className="wordmark">LocalLexis</div>
         <div className="pron">/ˈloʊkəlˌskraɪb/ &nbsp;·&nbsp; v1.0</div>
       </div>
       <button className="new-btn" onClick={() => setRoute('idle')}>
@@ -2725,7 +2725,7 @@ export function Window({ children, screenLabel }: { children: ReactNode; screenL
           <div className="tl">
             <span className="dot r" /><span className="dot y" /><span className="dot g" />
           </div>
-          <div className="titlebar-title">LocalScribe</div>
+          <div className="titlebar-title">LocalLexis</div>
         </div>
         <div className="app">{children}</div>
       </div>
@@ -2834,7 +2834,7 @@ git commit -m "feat(ui): main header with crumb, title, On-device chip"
 
 ### Task 22: Idle screen — high-fi
 
-Port [docs/design_handoff_localscribe/screens.jsx](../../design_handoff_localscribe/screens.jsx) `IdleScreen` to TSX. Wire drop + Browse to actual file ingestion.
+Port [docs/design_handoff_locallexis/screens.jsx](../../design_handoff_locallexis/screens.jsx) `IdleScreen` to TSX. Wire drop + Browse to actual file ingestion.
 
 **Files:**
 - Create: `ui/src/screens/IdleScreen.tsx`
@@ -2877,7 +2877,7 @@ test('drag-over toggles active class', () => {
 
 - [ ] **Step 3: Implement**
 
-`ui/src/screens/IdleScreen.tsx`: port [screens.jsx#L6–77](../../design_handoff_localscribe/screens.jsx) verbatim, then:
+`ui/src/screens/IdleScreen.tsx`: port [screens.jsx#L6–77](../../design_handoff_locallexis/screens.jsx) verbatim, then:
 - Replace `setRoute('complete')` with `props.onTranscribe(filePath)`.
 - File path comes from Tauri's drag event (use `@tauri-apps/api/event` `listen('tauri://file-drop', ...)`) — in browser tests fall back to `e.dataTransfer.files[0].path`.
 - "Browse files…" calls Tauri's `@tauri-apps/plugin-dialog` `open({ multiple: false, filters: [{ name: 'Audio', extensions: ['mp3','m4a','wav','ogg','flac','webm']}] })`.
@@ -2925,7 +2925,7 @@ git commit -m "feat(ui): Idle screen (high-fi) — drop zone, options, recent, e
 The handoff doesn't include this screen. Design it before building.
 
 **Files:**
-- Create: `docs/design_handoff_localscribe/progress-screen.md`
+- Create: `docs/design_handoff_locallexis/progress-screen.md`
 
 - [ ] **Step 1: Write the design note**
 
@@ -2936,7 +2936,7 @@ Length target: ~300 words, with a small ASCII wireframe.
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/design_handoff_localscribe/progress-screen.md
+git add docs/design_handoff_locallexis/progress-screen.md
 git commit -m "design: in-progress screen layout note"
 ```
 
@@ -3051,7 +3051,7 @@ git commit -m "feat(ui): in-progress screen (progress bar, stage chips, live tra
 
 ### Task 25: Complete screen — high-fi
 
-Port [screens.jsx#L222–301](../../design_handoff_localscribe/screens.jsx) `CompleteScreen` to TSX. Wire relabel to `/transcripts/{id}/relabel`.
+Port [screens.jsx#L222–301](../../design_handoff_locallexis/screens.jsx) `CompleteScreen` to TSX. Wire relabel to `/transcripts/{id}/relabel`.
 
 **Files:**
 - Create: `ui/src/screens/CompleteScreen.tsx`
@@ -3139,7 +3139,7 @@ git commit -m "feat(ui): Complete screen (high-fi) — relabel + manuscript tran
 
 ### Task 26: Record screen — high-fi
 
-Port [screens.jsx#L82–220](../../design_handoff_localscribe/screens.jsx) `RecordScreen` (including `Waveform` SVG).
+Port [screens.jsx#L82–220](../../design_handoff_locallexis/screens.jsx) `RecordScreen` (including `Waveform` SVG).
 
 **Files:**
 - Create: `ui/src/screens/RecordScreen.tsx`
@@ -3221,7 +3221,7 @@ git commit -m "feat(ui): Record screen (high-fi) — device pill, waveform, time
 ### Task 27: Design note — Library screen
 
 **Files:**
-- Create: `docs/design_handoff_localscribe/library-screen.md`
+- Create: `docs/design_handoff_locallexis/library-screen.md`
 
 - [ ] **Step 1: Write design note**
 
@@ -3230,7 +3230,7 @@ Cover: layout (search bar + filterable list), row structure (`audio name · dura
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/design_handoff_localscribe/library-screen.md
+git add docs/design_handoff_locallexis/library-screen.md
 git commit -m "design: Library screen layout note"
 ```
 
@@ -3309,7 +3309,7 @@ git commit -m "feat(ui): Library screen (search + transcript list)"
 ### Task 29: Design note — Watch folder screen
 
 **Files:**
-- Create: `docs/design_handoff_localscribe/watch-screen.md`
+- Create: `docs/design_handoff_locallexis/watch-screen.md`
 
 - [ ] **Step 1: Write note**
 
@@ -3318,7 +3318,7 @@ Cover: folder picker (button → Tauri dialog), running/stopped state with toggl
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/design_handoff_localscribe/watch-screen.md
+git add docs/design_handoff_locallexis/watch-screen.md
 git commit -m "design: Watch folder screen layout note"
 ```
 
@@ -3401,7 +3401,7 @@ git commit -m "feat(ui): Watch folder screen (picker + status + event log)"
 ### Task 31: Design note — Settings screen
 
 **Files:**
-- Create: `docs/design_handoff_localscribe/settings-screen.md`
+- Create: `docs/design_handoff_locallexis/settings-screen.md`
 
 - [ ] **Step 1: Write note**
 
@@ -3410,7 +3410,7 @@ Cover: form fields (backend select, asr_model input, hf_token masked input, mode
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/design_handoff_localscribe/settings-screen.md
+git add docs/design_handoff_locallexis/settings-screen.md
 git commit -m "design: Settings screen layout note"
 ```
 
@@ -3547,9 +3547,9 @@ jobs:
       - name: Build sidecar
         run: |
           pip install -e ".[api,packaging]"
-          pyinstaller packaging/localscribe-sidecar.spec --clean
+          pyinstaller packaging/locallexis-sidecar.spec --clean
           mkdir -p ui/src-tauri/binaries
-          cp dist/localscribe-sidecar* ui/src-tauri/binaries/
+          cp dist/locallexis-sidecar* ui/src-tauri/binaries/
       - name: Install JS deps
         working-directory: ui
         run: pnpm install
@@ -3558,7 +3558,7 @@ jobs:
         run: pnpm tauri build
       - uses: actions/upload-artifact@v4
         with:
-          name: localscribe-${{ runner.os }}
+          name: locallexis-${{ runner.os }}
           path: |
             ui/src-tauri/target/release/bundle/**/*
 ```
@@ -3567,7 +3567,7 @@ jobs:
 
 ```bash
 git add .github/workflows/build-app.yml
-git commit -m "ci: build LocalScribe app for Mac/Windows/Linux"
+git commit -m "ci: build LocalLexis app for Mac/Windows/Linux"
 ```
 
 ---
@@ -3582,7 +3582,7 @@ git commit -m "ci: build LocalScribe app for Mac/Windows/Linux"
 Append after the CLI section:
 
 ```markdown
-## Desktop app — LocalScribe
+## Desktop app — LocalLexis
 
 A cross-platform desktop UI lives in `ui/`. It wraps the CLI through a
 bundled FastAPI sidecar, with full feature parity plus a transcript
@@ -3592,9 +3592,9 @@ Local dev:
 
     # 1. Build the sidecar
     pip install -e ".[api,packaging]"
-    pyinstaller packaging/localscribe-sidecar.spec --clean
+    pyinstaller packaging/locallexis-sidecar.spec --clean
     mkdir -p ui/src-tauri/binaries
-    cp dist/localscribe-sidecar* ui/src-tauri/binaries/
+    cp dist/locallexis-sidecar* ui/src-tauri/binaries/
 
     # 2. Run the app in dev mode
     cd ui && pnpm install && pnpm tauri dev
@@ -3602,8 +3602,8 @@ Local dev:
 Release builds are produced by `.github/workflows/build-app.yml` for
 macOS, Windows, and Linux.
 
-Design references live in `docs/design_handoff_localscribe/`. Run
-`open docs/design_handoff_localscribe/LocalScribe-standalone.html` to
+Design references live in `docs/design_handoff_locallexis/`. Run
+`open docs/design_handoff_locallexis/LocalLexis-standalone.html` to
 see the high-fi prototype.
 ```
 
@@ -3645,7 +3645,7 @@ No spec sections without coverage.
 
 ---
 
-**Plan complete and saved to `docs/superpowers/plans/2026-05-15-localscribe-desktop-ui.md`. Two execution options:**
+**Plan complete and saved to `docs/superpowers/plans/2026-05-15-locallexis-desktop-ui.md`. Two execution options:**
 
 **1. Subagent-Driven (recommended)** — I dispatch a fresh subagent per task, review between tasks, fast iteration.
 

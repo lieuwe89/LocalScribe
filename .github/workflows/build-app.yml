@@ -55,20 +55,20 @@ jobs:
       - name: Build sidecar
         run: |
           pip install -e ".[api,packaging]"
-          pyinstaller packaging/localscribe-sidecar.spec --clean
+          pyinstaller packaging/locallexis-sidecar.spec --clean
           mkdir -p ui/src-tauri/binaries
 
       - name: Stage sidecar (Unix)
         if: runner.os != 'Windows'
         run: |
-          cp dist/localscribe-sidecar ui/src-tauri/binaries/localscribe-sidecar-${{ matrix.target }}
-          chmod +x ui/src-tauri/binaries/localscribe-sidecar-${{ matrix.target }}
+          cp dist/locallexis-sidecar ui/src-tauri/binaries/locallexis-sidecar-${{ matrix.target }}
+          chmod +x ui/src-tauri/binaries/locallexis-sidecar-${{ matrix.target }}
 
       - name: Stage sidecar (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Copy-Item dist\localscribe-sidecar.exe ui\src-tauri\binaries\localscribe-sidecar-${{ matrix.target }}.exe
+          Copy-Item dist\locallexis-sidecar.exe ui\src-tauri\binaries\locallexis-sidecar-${{ matrix.target }}.exe
 
       - name: Download bundled ASR models
         run: python scripts/download_bundled_models.py
@@ -85,7 +85,7 @@ jobs:
         with:
           projectPath: ui
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('LocalScribe {0}', github.ref_name) || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('LocalLexis {0}', github.ref_name) || '' }}
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}

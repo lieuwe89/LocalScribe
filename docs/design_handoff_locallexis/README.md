@@ -1,8 +1,8 @@
-# Handoff: LocalScribe Desktop UI
+# Handoff: LocalLexis Desktop UI
 
 ## Overview
 
-LocalScribe is a cross-platform desktop GUI for the existing `stt` CLI / `speechtotext` Python package. It wraps the CLI in a Tauri shell and adds a transcript library, drop-zone transcribe flow, in-app recording, and a watch-folder mode. The design is privacy-forward: nothing leaves the user's machine, and that posture is reinforced through subtle UI cues (an "On-device" chip in the header, a quiet live dot in the sidebar footer, a manuscript metaphor throughout).
+LocalLexis is a cross-platform desktop GUI for the existing `stt` CLI / `speechtotext` Python package. It wraps the CLI in a Tauri shell and adds a transcript library, drop-zone transcribe flow, in-app recording, and a watch-folder mode. The design is privacy-forward: nothing leaves the user's machine, and that posture is reinforced through subtle UI cues (an "On-device" chip in the header, a quiet live dot in the sidebar footer, a manuscript metaphor throughout).
 
 The full product spec lives in `2026-05-15-stt-desktop-ui-design.md` (architecture, API contract, error handling, build sequence). This handoff covers the **UI layer** only — what's been visually designed and prototyped.
 
@@ -14,8 +14,8 @@ The target codebase is **Tauri + React + Vite** (per the spec). The task is to r
 
 To run the prototype:
 
-- **Recommended:** open `LocalScribe-standalone.html` — fully self-contained, runs offline by double-clicking.
-- **Source files:** the split source (`LocalScribe.html` + `*.jsx` + `styles.css`) is easier to read. Serve from a local HTTP server (e.g. `python -m http.server`); opening directly via `file://` may fail to load the sibling `.jsx` files in some browsers.
+- **Recommended:** open `LocalLexis-standalone.html` — fully self-contained, runs offline by double-clicking.
+- **Source files:** the split source (`LocalLexis.html` + `*.jsx` + `styles.css`) is easier to read. Serve from a local HTTP server (e.g. `python -m http.server`); opening directly via `file://` may fail to load the sibling `.jsx` files in some browsers.
 
 ## Fidelity
 
@@ -30,7 +30,7 @@ The app is a single window split into a fixed-width left sidebar (`232px`) and a
 ### Sidebar (constant across all views)
 
 - **Brand block** (padding `4px 18px 16px`):
-  - Wordmark "LocalScribe" — Newsreader serif, 22px / 500, color `--ink` (`#ece9e1`), letter-spacing `-0.01em`.
+  - Wordmark "LocalLexis" — Newsreader serif, 22px / 500, color `--ink` (`#ece9e1`), letter-spacing `-0.01em`.
   - Pronunciation guide "/ˈloʊkəlˌskraɪb/ · v1.0" — Newsreader italic, 10.5px, color `--ink-dim`.
 - **"+ New transcription" button** (margin `0 14px 14px`, height 34px):
   - Inverted: bg `--ink` (off-white `#ece9e1`), text `--bg` (near-black `#0c0c0d`).
@@ -191,13 +191,13 @@ Logo: text-only wordmark in Newsreader. The user has indicated they'll provide a
 
 ## Files
 
-- `LocalScribe.html` — entry: font imports, root mount, EDITMODE tweak defaults, script tags.
+- `LocalLexis.html` — entry: font imports, root mount, EDITMODE tweak defaults, script tags.
 - `styles.css` — all visual tokens and component styles. Single file by design; split if you adopt CSS Modules / Tailwind / styled-components.
 - `app.jsx` — top-level `<App>`: route state, window chrome, main header with chips, Tweaks panel wiring.
 - `sidebar.jsx` — `<Sidebar>` and its data (nav list, mock recent transcripts).
 - `screens.jsx` — `<IdleScreen>`, `<RecordScreen>` (incl. `<Waveform>`), `<CompleteScreen>` with `SAMPLE_TURNS`, plus `<StubScreen>` and the three stubbed screens.
 - `primitives.jsx` — `<Icon>` and `SPEAKER_COLORS`.
 - `tweaks-panel.jsx` — shared Tweaks shell (host protocol + form controls). Not part of the product; only used by the prototype environment.
-- `LocalScribe-standalone.html` — pre-bundled, double-clickable copy of the prototype. Single file, runs offline.
+- `LocalLexis-standalone.html` — pre-bundled, double-clickable copy of the prototype. Single file, runs offline.
 
 For the original product spec (architecture, REST contract, error handling, build sequence), see `2026-05-15-stt-desktop-ui-design.md` in the project root.

@@ -1,9 +1,9 @@
-# LocalScribe
+# LocalLexis
 
 > Local-first speech-to-text with speaker labels. Cross-platform desktop app + CLI.
 > Nothing leaves your machine — models, audio, and transcripts all live in your filesystem.
 
-LocalScribe transcribes audio into a typeset, speaker-labeled manuscript. It
+LocalLexis transcribes audio into a typeset, speaker-labeled manuscript. It
 runs on your computer using [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
 for ASR and [pyannote.audio](https://github.com/pyannote/pyannote-audio) for
 speaker diarization. There is no cloud, no API call, no telemetry. Audio you
@@ -14,7 +14,7 @@ The project ships as two things:
 
 - **`stt`** — a Python CLI for transcribing, recording, watching folders,
   relabeling speakers, and editing config from a terminal.
-- **LocalScribe** — a Tauri desktop app (macOS / Windows / Linux) that wraps
+- **LocalLexis** — a Tauri desktop app (macOS / Windows / Linux) that wraps
   the CLI in a manuscript-themed UI: drop a file, watch it transcribe live,
   relabel speakers inline, browse the library.
 
@@ -56,7 +56,7 @@ Pre-built binaries are produced by
 [`.github/workflows/build-app.yml`](.github/workflows/build-app.yml) for
 macOS, Windows, and Linux on every push to `main`. Once a release is cut,
 download the platform bundle from the
-[Releases](https://github.com/lieuwe89/LocalScribe/releases) page and run it.
+[Releases](https://github.com/lieuwe89/LocalLexis/releases) page and run it.
 
 > The `base.en` Whisper model (~140 MB) is bundled — transcription works
 > immediately. Pyannote speaker diarization requires a one-time download
@@ -96,7 +96,7 @@ stt record --out memo.wav                 # Ctrl-C to stop; auto-transcribes
 stt watch ~/Recordings                    # daemon: new files → transcribed
 stt relabel meeting.json SPEAKER_00=Alice SPEAKER_01=Bob
 stt devices                               # list audio inputs
-stt serve                                 # run the LocalScribe HTTP API
+stt serve                                 # run the LocalLexis HTTP API
 ```
 
 ### Recording meetings (system audio)
@@ -158,8 +158,8 @@ layer is the same code that runs when you invoke `stt` from a terminal.
 Detailed design lives in
 [docs/superpowers/specs/2026-05-15-stt-desktop-ui-design.md](docs/superpowers/specs/2026-05-15-stt-desktop-ui-design.md).
 The visual handoff (mockups, JSX prototypes, design tokens) lives in
-[docs/design_handoff_localscribe/](docs/design_handoff_localscribe/) — open
-[`LocalScribe-standalone.html`](docs/design_handoff_localscribe/LocalScribe-standalone.html)
+[docs/design_handoff_locallexis/](docs/design_handoff_locallexis/) — open
+[`LocalLexis-standalone.html`](docs/design_handoff_locallexis/LocalLexis-standalone.html)
 in a browser to see the high-fi prototype.
 
 ## Build from source
@@ -174,9 +174,9 @@ The desktop app is a Tauri 2 project under [`ui/`](ui/). You'll need:
 ```bash
 # 1. Build the sidecar binary
 pip install -e ".[api,packaging]"
-pyinstaller packaging/localscribe-sidecar.spec --clean
+pyinstaller packaging/locallexis-sidecar.spec --clean
 mkdir -p ui/src-tauri/binaries
-cp dist/localscribe-sidecar ui/src-tauri/binaries/localscribe-sidecar-$(rustc -vV | sed -n 's/host: //p')
+cp dist/locallexis-sidecar ui/src-tauri/binaries/locallexis-sidecar-$(rustc -vV | sed -n 's/host: //p')
 
 # 2. Run in dev mode
 cd ui
@@ -203,7 +203,7 @@ SpeechToText/
 ├── packaging/                    # PyInstaller spec
 ├── tests/                        # pytest suite (108 fast tests + integration)
 ├── docs/
-│   ├── design_handoff_localscribe/  # visual handoff (HTML prototype, JSX, CSS)
+│   ├── design_handoff_locallexis/  # visual handoff (HTML prototype, JSX, CSS)
 │   └── superpowers/specs/plans/     # design specs and implementation plans
 └── .github/workflows/            # CI for sidecar + full app
 ```

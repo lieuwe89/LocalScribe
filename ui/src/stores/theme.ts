@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 export type Theme = 'dark' | 'light';
 
-const STORAGE_KEY = 'localscribe.theme';
+const STORAGE_KEY = 'locallexis.theme';
 
 function readInitial(): Theme {
   try {

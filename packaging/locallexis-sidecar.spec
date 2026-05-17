@@ -1,6 +1,6 @@
-# PyInstaller spec for the LocalScribe FastAPI sidecar.
-# Build:   pyinstaller packaging/localscribe-sidecar.spec --clean
-# Output:  dist/localscribe-sidecar (or .exe on Windows)
+# PyInstaller spec for the LocalLexis FastAPI sidecar.
+# Build:   pyinstaller packaging/locallexis-sidecar.spec --clean
+# Output:  dist/locallexis-sidecar (or .exe on Windows)
 # The Tauri shell ships this binary alongside the app.
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
@@ -40,7 +40,7 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, a.binaries, a.datas,
-    name='localscribe-sidecar',
+    name='locallexis-sidecar',
     debug=False,
     strip=False,
     upx=False,
