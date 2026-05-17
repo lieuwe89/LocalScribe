@@ -77,7 +77,17 @@ export function SettingsScreen() {
         </select>
       </Field>
       <Field label="ASR model" info={INFO.asr_model}>
-        <input value={draft.asr_model ?? cfg.asr_model} onChange={e => set('asr_model', e.target.value)} />
+        <select value={draft.asr_model ?? cfg.asr_model} onChange={e => set('asr_model', e.target.value)}>
+          <option value="tiny">tiny (~75 MB)</option>
+          <option value="tiny.en">tiny.en (~75 MB, English-only)</option>
+          <option value="base">base (~140 MB)</option>
+          <option value="base.en">base.en (~140 MB, English-only, bundled)</option>
+          <option value="small">small (~470 MB)</option>
+          <option value="small.en">small.en (~470 MB, English-only)</option>
+          <option value="medium">medium (~1.5 GB)</option>
+          <option value="medium.en">medium.en (~1.5 GB, English-only)</option>
+          <option value="large-v3">large-v3 (~3 GB, best quality)</option>
+        </select>
       </Field>
       <Field label="Hugging Face token" info={INFO.hf_token}>
         <input

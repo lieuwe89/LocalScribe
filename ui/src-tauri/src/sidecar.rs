@@ -3,6 +3,7 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[derive(Default)]
 pub struct SidecarUrl(pub Mutex<Option<String>>);
@@ -20,16 +21,37 @@ pub fn sidecar_url(state: State<SidecarUrl>) -> Option<String> {
     state.0.lock().unwrap().clone()
 }
 
+fn locate_bundled_models(app: &AppHandle) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join("resources").join("models"));
+        candidates.push(resource_dir.join("_up_").join("resources").join("models"));
+        candidates.push(resource_dir.join("models"));
+    }
+    // Dev fallback: tauri-cli runs the binary out of target/debug; resources
+    // are only copied into the bundle for release builds. Use the compile-time
+    // source dir to reach them in dev.
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    candidates.push(manifest_dir.join("resources").join("models"));
+
+    for c in candidates {
+        if c.is_dir() {
+            return Some(c);
+        }
+    }
+    None
+}
+
 pub fn spawn(app: &AppHandle) -> Result<(), String> {
     let mut env: HashMap<String, String> = HashMap::new();
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        let models_dir = resource_dir.join("resources").join("models");
-        if models_dir.is_dir() {
-            env.insert(
-                "LOCALSCRIBE_BUNDLED_MODELS".to_string(),
-                models_dir.to_string_lossy().to_string(),
-            );
-        }
+    if let Some(models_dir) = locate_bundled_models(app) {
+        eprintln!("[localscribe] bundled models: {}", models_dir.display());
+        env.insert(
+            "LOCALSCRIBE_BUNDLED_MODELS".to_string(),
+            models_dir.to_string_lossy().to_string(),
+        );
+    } else {
+        eprintln!("[localscribe] bundled models: not found (will download on demand)");
     }
 
     let sidecar = app
