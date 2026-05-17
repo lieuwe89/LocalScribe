@@ -25,19 +25,41 @@ export function LibraryScreen({ setRoute, setTid }: Props) {
   useEffect(() => { refresh(); }, [refresh]);
 
   const filtered = useMemo(() => {
-    const n = q.toLowerCase();
+    const n = q.trim().toLowerCase();
     if (!n) return items;
-    return items.filter(i => (i.audio_path || i.id).toLowerCase().includes(n));
+    return items.filter(i => {
+      const hay = [
+        i.audio_path ?? '',
+        i.id,
+        i.language ?? '',
+      ].join('\n').toLowerCase();
+      return hay.includes(n);
+    });
   }, [items, q]);
+
+  const isSearching = q.trim().length > 0;
+  const libraryEmpty = items.length === 0;
 
   return (
     <div className="library">
       <div className="lib-search">
         <span className="ico"><Icon name="search" size={14} /></span>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search transcripts…" />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search transcripts by filename, id, or language…" />
+        {isSearching && (
+          <button
+            className="lib-search-clear"
+            onClick={() => setQ('')}
+            title="Clear search"
+            aria-label="Clear search"
+          >×</button>
+        )}
       </div>
       {filtered.length === 0 ? (
-        <div className="lib-empty">No transcripts yet — drop an audio file on the Transcribe tab.</div>
+        <div className="lib-empty">
+          {libraryEmpty
+            ? 'No transcripts yet — drop an audio file on the Transcribe tab.'
+            : <>No transcripts match <em>“{q.trim()}”</em>.</>}
+        </div>
       ) : (
         <div className="lib-list">
           {filtered.map(i => {
