@@ -1,8 +1,18 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+
 from speechtotext.diarize.pyannote import PyannoteDiarizer
 from speechtotext.models import SpeakerTurn
+
+
+def _patch_sf_read():
+    """soundfile.read mock that returns silent stereo at 16 kHz."""
+    return patch(
+        "speechtotext.diarize.pyannote.sf.read",
+        return_value=(np.zeros((1600, 1), dtype=np.float32), 16000),
+    )
 
 
 def _fake_annotation(turns: list[tuple[float, float, str]]):
@@ -32,7 +42,7 @@ def test_diarize_returns_speaker_turns(tmp_path: Path):
 
     with patch(
         "speechtotext.diarize.pyannote.Pipeline.from_pretrained", return_value=pipeline
-    ):
+    ), _patch_sf_read():
         diarizer = PyannoteDiarizer(hf_token="hf_test", backend="cpu")
         turns = diarizer.diarize(wav, num_speakers=None)
 
@@ -40,6 +50,9 @@ def test_diarize_returns_speaker_turns(tmp_path: Path):
     assert isinstance(turns[0], SpeakerTurn)
     assert turns[0].speaker_id == "SPEAKER_00"
     assert turns[1].speaker_id == "SPEAKER_01"
+    # Pipeline must be called with a {waveform, sample_rate} dict, not a path
+    arg = pipeline.call_args.args[0]
+    assert isinstance(arg, dict) and {"waveform", "sample_rate"} <= arg.keys()
 
 
 def test_diarize_passes_num_speakers_hint(tmp_path: Path):
@@ -50,7 +63,7 @@ def test_diarize_passes_num_speakers_hint(tmp_path: Path):
 
     with patch(
         "speechtotext.diarize.pyannote.Pipeline.from_pretrained", return_value=pipeline
-    ):
+    ), _patch_sf_read():
         diarizer = PyannoteDiarizer(hf_token="hf_test", backend="cpu")
         diarizer.diarize(wav, num_speakers=3)
 

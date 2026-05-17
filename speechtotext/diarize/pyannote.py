@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+import soundfile as sf
 import torch
 from pyannote.audio import Pipeline
 
@@ -33,7 +34,15 @@ class PyannoteDiarizer:
         kwargs: dict = {}
         if num_speakers is not None:
             kwargs["num_speakers"] = num_speakers
-        result = self._pipeline(str(wav_path), **kwargs)
+        # Pre-load with soundfile so pyannote doesn't reach for torchcodec,
+        # whose C extensions are not always loadable from the PyInstaller
+        # frozen bundle. pyannote accepts {"waveform": Tensor, "sample_rate": int}.
+        data, sample_rate = sf.read(str(wav_path), always_2d=True, dtype="float32")
+        # soundfile returns (time, channel); pyannote wants (channel, time).
+        waveform = torch.from_numpy(data.T)
+        result = self._pipeline(
+            {"waveform": waveform, "sample_rate": sample_rate}, **kwargs
+        )
         # pyannote 4.x returns a DiarizeOutput wrapping the Annotation;
         # 3.x returns the Annotation directly.
         annotation = getattr(result, "speaker_diarization", result)
