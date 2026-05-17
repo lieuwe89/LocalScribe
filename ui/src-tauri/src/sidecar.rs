@@ -54,6 +54,20 @@ pub fn spawn(app: &AppHandle) -> Result<(), String> {
         eprintln!("[localscribe] bundled models: not found (will download on demand)");
     }
 
+    // GUI-launched macOS apps get a stripped PATH that excludes Homebrew.
+    // ffmpeg (required for audio ingest) is usually only on the Homebrew or
+    // MacPorts paths. Prepend the common locations so the sidecar's
+    // subprocess.run('ffmpeg', ...) can find it.
+    let extra_paths = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"];
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let mut merged_parts: Vec<&str> = extra_paths.to_vec();
+    for p in current_path.split(':') {
+        if !p.is_empty() && !merged_parts.contains(&p) {
+            merged_parts.push(p);
+        }
+    }
+    env.insert("PATH".to_string(), merged_parts.join(":"));
+
     let sidecar = app
         .shell()
         .sidecar("localscribe-sidecar")
