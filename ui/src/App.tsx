@@ -96,6 +96,8 @@ export default function App() {
           {route === 'complete' && tid && currentDoc && (
             <CompleteScreen
               doc={currentDoc}
+              txtPath={currentDoc.paths?.txt}
+              jsonPath={currentDoc.paths?.json}
               onRelabel={async (m) => { await relabel(tid, m); }}
             />
           )}

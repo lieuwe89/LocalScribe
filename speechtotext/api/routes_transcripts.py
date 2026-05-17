@@ -21,7 +21,16 @@ def get_transcript(tid: str, request: Request) -> dict:
     p = find_sidecar(request.app.state.library_dirs, tid)
     if p is None:
         raise HTTPException(status_code=404, detail=f"transcript not found: {tid}")
-    return json.loads(p.read_text(encoding="utf-8"))
+    doc = json.loads(p.read_text(encoding="utf-8"))
+    # Include the on-disk paths so the UI can offer "open .txt / .json"
+    # actions for transcripts loaded directly from the library (where no
+    # job record carries them).
+    txt = p.with_suffix(".txt")
+    doc["paths"] = {
+        "json": str(p),
+        **({"txt": str(txt)} if txt.is_file() else {}),
+    }
+    return doc
 
 
 @router.patch("/transcripts/{tid}/relabel")

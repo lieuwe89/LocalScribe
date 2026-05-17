@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Icon } from '../primitives/Icon';
 import { SPEAKER_COLORS } from '../primitives/colors';
 import type { TranscriptDoc } from '../api/types';
-import { open as shellOpen } from '@tauri-apps/plugin-shell';
+import { openPath } from '@tauri-apps/plugin-opener';
 
 interface Props {
   doc: TranscriptDoc;
@@ -36,9 +36,18 @@ export function CompleteScreen({ doc, txtPath, jsonPath, onRelabel }: Props) {
     [doc.segments, labels]
   );
 
-  const onCopy = () => navigator.clipboard.writeText(renderedText).catch(() => {});
-  const onOpenTxt = () => txtPath && shellOpen(txtPath).catch(() => {});
-  const onOpenJson = () => jsonPath && shellOpen(jsonPath).catch(() => {});
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(renderedText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // clipboard API can fail in restricted contexts; ignore
+    }
+  };
+  const onOpenTxt = () => txtPath && openPath(txtPath).catch((e) => console.error('open txt failed:', e));
+  const onOpenJson = () => jsonPath && openPath(jsonPath).catch((e) => console.error('open json failed:', e));
 
   const apply = async () => {
     const changed: Record<string, string> = {};
@@ -77,9 +86,25 @@ export function CompleteScreen({ doc, txtPath, jsonPath, onRelabel }: Props) {
           </div>
         </div>
         <div className="actions">
-          <button className="icon-btn" title="Copy transcript" onClick={onCopy}><Icon name="copy" size={15} /></button>
-          <button className="icon-btn" title="Open .txt" onClick={onOpenTxt}><Icon name="doc" size={15} /></button>
-          <button className="icon-btn" title="Open .json" onClick={onOpenJson}><Icon name="braces" size={15} /></button>
+          <button className="icon-btn" title={copied ? 'Copied!' : 'Copy transcript'} onClick={onCopy}>
+            <Icon name={copied ? 'check' : 'copy'} size={15} stroke={copied ? 2 : 1.5} />
+          </button>
+          <button
+            className="icon-btn"
+            title={txtPath ? `Open ${txtPath}` : 'No .txt file available'}
+            onClick={onOpenTxt}
+            disabled={!txtPath}
+          >
+            <Icon name="doc" size={15} />
+          </button>
+          <button
+            className="icon-btn"
+            title={jsonPath ? `Open ${jsonPath}` : 'No .json file available'}
+            onClick={onOpenJson}
+            disabled={!jsonPath}
+          >
+            <Icon name="braces" size={15} />
+          </button>
         </div>
       </div>
 

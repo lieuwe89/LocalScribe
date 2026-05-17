@@ -629,6 +629,8 @@ input, textarea { font-family: inherit; color: inherit; }
 }
 
 .icon-btn:hover { background: var(--bg-elev); color: var(--ink); }
+.icon-btn:disabled { opacity: 0.35; cursor: default; }
+.icon-btn:disabled:hover { background: transparent; color: var(--ink-dim); }
 
 /* ─── Relabel panel ─── */
 .relabel {

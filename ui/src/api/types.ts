@@ -46,6 +46,7 @@ export interface TranscriptDoc {
   segments: TranscriptSegment[];
   models: Record<string, string>;
   created_at: string;
+  paths?: { json?: string; txt?: string };
 }
 
 export interface AudioDeviceDto {
