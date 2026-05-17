@@ -100,10 +100,10 @@ from unittest.mock import patch
 def test_post_record_creates_job(tmp_path, monkeypatch):
     from speechtotext.api.app import create_app
     app = create_app()
-    out = tmp_path / "rec.wav"
+    out = tmp_path / "rec.flac"
     client = TestClient(app)
 
-    with patch("speechtotext.api.runner.record_to_wav") as rec:
+    with patch("speechtotext.api.runner.record_to_file") as rec:
         def fake_record(out_path, **kw):
             kw["stop_event"].wait()
             out_path.write_bytes(b"WAVE")

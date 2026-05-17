@@ -15,7 +15,7 @@ from speechtotext.asr.faster_whisper import FasterWhisperASR
 from speechtotext.backend import resolve_backend
 from speechtotext.config import Config, DEFAULT_CONFIG_PATH, load_config
 from speechtotext.diarize.pyannote import PyannoteDiarizer
-from speechtotext.ingest.mic import record_to_wav
+from speechtotext.ingest.mic import record_to_file
 from speechtotext.models import ProgressEvent, Transcript
 from speechtotext.pipeline import CancelledError, Pipeline
 from speechtotext.writer import write_transcript
@@ -131,11 +131,11 @@ def run_record_job(
     def _work() -> None:
         try:
             emit(StageEvent(stage="record", percent=0.0))
-            record_to_wav(out_path, device=device, stop_event=stop)
+            record_to_file(out_path, device=device, stop_event=stop)
             emit(StageEvent(stage="record", percent=1.0))
             emit(CompleteEvent(
                 transcript_id="",
-                paths={"wav": str(out_path)},
+                paths={"audio": str(out_path)},
             ))
         except Exception as exc:  # noqa: BLE001
             emit(ErrorEvent(message=f"{type(exc).__name__}: {exc}"))

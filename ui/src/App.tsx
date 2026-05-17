@@ -95,6 +95,7 @@ export default function App() {
           )}
           {route === 'complete' && tid && currentDoc && (
             <CompleteScreen
+              key={tid}
               doc={currentDoc}
               txtPath={currentDoc.paths?.txt}
               jsonPath={currentDoc.paths?.json}
@@ -113,7 +114,7 @@ export default function App() {
               onStart={async () => {
                 const dir = await audioDir();
                 const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-                const filename = `recording-${ts}.wav`;
+                const filename = `recording-${ts}.flac`;
                 const fullPath = await join(dir, filename);
                 useRecording.getState().reset();
                 const id = await startRecord(fullPath, recording.deviceId ?? undefined);

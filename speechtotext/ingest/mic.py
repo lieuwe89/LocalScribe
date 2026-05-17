@@ -14,10 +14,9 @@ import soundfile as sf
 def _install_stop_signals(stop: threading.Event) -> Iterator[None]:
     """Install SIGINT + SIGTERM handlers that set ``stop``.
 
-    Ensures the recording loop exits cleanly so ``SoundFile.__exit__`` can patch
-    the RIFF header sizes. Without this, SIGTERM (sent by orchestrators,
-    `kill`, supervisord, etc.) bypasses the context managers and leaves the WAV
-    with a placeholder size, requiring manual recovery.
+    Ensures the recording loop exits cleanly so ``SoundFile.__exit__`` can
+    finalise the file. Without this, SIGTERM bypasses the context managers and
+    may leave the output file in an incomplete state.
 
     Signal handlers can only be installed in the main thread; if called from
     a worker thread we silently skip and rely on the caller's stop_event.
@@ -44,7 +43,7 @@ def _install_stop_signals(stop: threading.Event) -> Iterator[None]:
                 pass
 
 
-def record_to_wav(
+def record_to_file(
     out_path: Path,
     sample_rate: int = 16000,
     channels: int = 1,
@@ -60,6 +59,7 @@ def record_to_wav(
         mode="w",
         samplerate=sample_rate,
         channels=channels,
+        format="FLAC",
         subtype="PCM_16",
     ) as fh, sd.InputStream(
         samplerate=sample_rate,

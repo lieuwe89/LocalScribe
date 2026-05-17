@@ -4,14 +4,14 @@ import subprocess
 import sys
 import threading
 import time
-import wave
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+import soundfile as sf
 
-from speechtotext.ingest.mic import _install_stop_signals, record_to_wav
+from speechtotext.ingest.mic import _install_stop_signals, record_to_file
 
 _SKIP_SIGNALS = pytest.mark.skipif(
     sys.platform == "win32",
@@ -19,8 +19,8 @@ _SKIP_SIGNALS = pytest.mark.skipif(
 )
 
 
-def test_record_writes_wav(tmp_path: Path):
-    out = tmp_path / "rec.wav"
+def test_record_writes_flac(tmp_path: Path):
+    out = tmp_path / "rec.flac"
     fake_chunks = [
         np.zeros((1600, 1), dtype=np.int16),
         np.ones((1600, 1), dtype=np.int16),
@@ -36,7 +36,7 @@ def test_record_writes_wav(tmp_path: Path):
         stream.read.side_effect = [(c, False) for c in fake_chunks]
         sf_handle = sf_cls.return_value.__enter__.return_value
 
-        record_to_wav(out, sample_rate=16000, channels=1, stop_event=stop)
+        record_to_file(out, sample_rate=16000, channels=1, stop_event=stop)
 
     assert sf_cls.call_args.args[0] == str(out)
     assert sf_handle.write.call_count == 2
@@ -107,11 +107,11 @@ def test_install_stop_signals_skips_in_worker_thread():
 
 
 @_SKIP_SIGNALS
-def test_record_to_wav_survives_sigterm_with_valid_header(tmp_path: Path):
+def test_record_to_file_survives_sigterm_with_valid_output(tmp_path: Path):
     """End-to-end: a child process recording to a file should produce a valid
-    WAV header even when killed with SIGTERM mid-loop. Uses mocked audio I/O
+    FLAC file even when killed with SIGTERM mid-loop. Uses mocked audio I/O
     inside the child to keep the test hermetic."""
-    out = tmp_path / "rec.wav"
+    out = tmp_path / "rec.flac"
     script = tmp_path / "runner.py"
     script.write_text(
         f"""
@@ -124,7 +124,7 @@ from speechtotext.ingest import mic
 
 # Replace the sounddevice InputStream with a generator that emits silent blocks
 # forever so the recorder is "live" when SIGTERM arrives. SoundFile stays real
-# so the file on disk actually has a valid header after __exit__.
+# so the file on disk actually has a valid FLAC stream after __exit__.
 fake_stream = MagicMock()
 fake_stream.__enter__.return_value = fake_stream
 fake_stream.__exit__.return_value = False
@@ -133,7 +133,7 @@ def _read(n):
 fake_stream.read.side_effect = _read
 
 with patch.object(mic.sd, "InputStream", return_value=fake_stream):
-    mic.record_to_wav(Path({str(out)!r}), sample_rate=16000, channels=1, block_size=1600)
+    mic.record_to_file(Path({str(out)!r}), sample_rate=16000, channels=1, block_size=1600)
 """
     )
     proc = subprocess.Popen([sys.executable, str(script)])
@@ -143,8 +143,8 @@ with patch.object(mic.sd, "InputStream", return_value=fake_stream):
     proc.wait(timeout=5)
     assert proc.returncode == 0, "child should exit cleanly after SIGTERM"
     assert out.exists()
-    # Header must be valid — wave.open must succeed without raising.
-    with wave.open(str(out)) as w:
-        assert w.getframerate() == 16000
-        assert w.getnchannels() == 1
-        assert w.getnframes() > 0, "should have captured at least one frame"
+    # File must be a readable FLAC with correct properties.
+    info = sf.info(str(out))
+    assert info.samplerate == 16000
+    assert info.channels == 1
+    assert info.frames > 0, "should have captured at least one frame"

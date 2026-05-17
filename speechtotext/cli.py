@@ -20,7 +20,7 @@ from speechtotext.backend import resolve_backend
 from speechtotext.config import DEFAULT_CONFIG_PATH, load_config
 from speechtotext.diarize.pyannote import PyannoteDiarizer
 from speechtotext.ingest.file import IngestError
-from speechtotext.ingest.mic import record_to_wav
+from speechtotext.ingest.mic import record_to_file
 from speechtotext.ingest.watch import run_watch, should_process
 from speechtotext.pipeline import Pipeline
 from speechtotext.progress import console_renderer, json_renderer
@@ -82,7 +82,7 @@ def transcribe(
 
 @app.command()
 def record(
-    out: Annotated[Path, typer.Option("--out")] = Path("recording.wav"),
+    out: Annotated[Path, typer.Option("--out")] = Path("recording.flac"),
     device: Annotated[str | None, typer.Option("--device")] = None,
     transcribe_after: Annotated[bool, typer.Option("--transcribe/--no-transcribe")] = True,
     backend: Annotated[str | None, typer.Option("--backend")] = None,
@@ -91,7 +91,7 @@ def record(
     stop = threading.Event()
     typer.echo("recording — press Ctrl+C to stop")
     try:
-        record_to_wav(out, device=device, stop_event=stop)
+        record_to_file(out, device=device, stop_event=stop)
     except KeyboardInterrupt:
         stop.set()
     typer.echo(f"wrote {out}")
