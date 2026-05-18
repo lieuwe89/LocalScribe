@@ -25,7 +25,7 @@ def test_transcribe_returns_segments(tmp_path: Path):
     )
     fake_info = MagicMock(language="en")
 
-    with patch("speechtotext.asr.faster_whisper.WhisperModel") as Model:
+    with patch("faster_whisper.WhisperModel") as Model:
         instance = Model.return_value
         instance.transcribe.return_value = (fake_segments, fake_info)
 
@@ -39,19 +39,19 @@ def test_transcribe_returns_segments(tmp_path: Path):
 
 
 def test_backend_to_device_mapping():
-    with patch("speechtotext.asr.faster_whisper.WhisperModel") as Model:
+    with patch("faster_whisper.WhisperModel") as Model:
         FasterWhisperASR(model_size="tiny", backend="cuda")
         kwargs = Model.call_args.kwargs
         assert kwargs["device"] == "cuda"
         assert kwargs["compute_type"] == "float16"
 
-    with patch("speechtotext.asr.faster_whisper.WhisperModel") as Model:
+    with patch("faster_whisper.WhisperModel") as Model:
         FasterWhisperASR(model_size="tiny", backend="mps")
         kwargs = Model.call_args.kwargs
         assert kwargs["device"] == "cpu"  # mps not yet supported by CTranslate2
         assert kwargs["compute_type"] == "int8"
 
-    with patch("speechtotext.asr.faster_whisper.WhisperModel") as Model:
+    with patch("faster_whisper.WhisperModel") as Model:
         FasterWhisperASR(model_size="tiny", backend="cpu")
         kwargs = Model.call_args.kwargs
         assert kwargs["device"] == "cpu"
@@ -62,7 +62,7 @@ def test_language_passed_through(tmp_path: Path):
     wav = tmp_path / "x.wav"
     wav.write_bytes(b"fake")
     fake_info = MagicMock(language="nl")
-    with patch("speechtotext.asr.faster_whisper.WhisperModel") as Model:
+    with patch("faster_whisper.WhisperModel") as Model:
         instance = Model.return_value
         instance.transcribe.return_value = (iter([]), fake_info)
         asr = FasterWhisperASR(model_size="tiny", backend="cpu")
@@ -77,7 +77,7 @@ def test_bundled_model_takes_precedence_over_name(tmp_path: Path, monkeypatch):
     (model_dir / "model.bin").write_bytes(b"fake")
     monkeypatch.setenv("LOCALLEXIS_BUNDLED_MODELS", str(bundled_root))
 
-    with patch("speechtotext.asr.faster_whisper.WhisperModel") as Model:
+    with patch("faster_whisper.WhisperModel") as Model:
         FasterWhisperASR(model_size="base.en", backend="cpu")
         kwargs = Model.call_args.kwargs
         assert kwargs["model_size_or_path"] == str(model_dir)
@@ -86,7 +86,7 @@ def test_bundled_model_takes_precedence_over_name(tmp_path: Path, monkeypatch):
 
 def test_falls_back_to_name_when_no_bundled_match(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("LOCALLEXIS_BUNDLED_MODELS", str(tmp_path))
-    with patch("speechtotext.asr.faster_whisper.WhisperModel") as Model:
+    with patch("faster_whisper.WhisperModel") as Model:
         FasterWhisperASR(model_size="medium", backend="cpu", download_root=tmp_path / "cache")
         kwargs = Model.call_args.kwargs
         assert kwargs["model_size_or_path"] == "medium"

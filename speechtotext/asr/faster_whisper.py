@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 import threading
 from pathlib import Path
-from typing import Callable, Literal
+from typing import TYPE_CHECKING, Callable, Literal
 
-from faster_whisper import WhisperModel
+if TYPE_CHECKING:
+    from faster_whisper import WhisperModel
 
 from speechtotext.models import Segment
 
@@ -43,6 +44,8 @@ class FasterWhisperASR:
         backend: Literal["cpu", "cuda", "mps"] = "cpu",
         download_root: Path | None = None,
     ) -> None:
+        from faster_whisper import WhisperModel  # lazy: heavy import deferred to first transcribe
+
         device, compute_type = _DEVICE_MAP[backend]
         bundled = _resolve_bundled_model(model_size)
         self._model = WhisperModel(
