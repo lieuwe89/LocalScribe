@@ -5,7 +5,6 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from speechtotext.api import runner
 from speechtotext.config import load_config
 
 router = APIRouter()
@@ -18,6 +17,7 @@ class WatchStartRequest(BaseModel):
 
 @router.post("/watch/start")
 def start(req: WatchStartRequest, request: Request) -> dict:
+    from speechtotext.api import runner  # lazy: ML stack loads on first job, not at boot
     d = Path(req.directory)
     if not d.is_dir():
         raise HTTPException(status_code=400, detail=f"not a directory: {d}")

@@ -8,8 +8,6 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from speechtotext.api import runner
-
 router = APIRouter()
 
 
@@ -22,6 +20,7 @@ class TranscribeRequest(BaseModel):
 
 @router.post("/jobs/transcribe", status_code=202)
 def post_transcribe(req: TranscribeRequest, request: Request) -> dict:
+    from speechtotext.api import runner  # lazy: ML stack loads on first job, not at boot
     audio = Path(req.path)
     if not audio.exists() or audio.is_dir():
         raise HTTPException(status_code=404, detail=f"audio not found: {audio}")
@@ -81,6 +80,7 @@ class RecordRequest(BaseModel):
 
 @router.post("/jobs/record", status_code=202)
 def post_record(req: RecordRequest, request: Request) -> dict:
+    from speechtotext.api import runner
     out = Path(req.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     registry = request.app.state.jobs
@@ -91,6 +91,7 @@ def post_record(req: RecordRequest, request: Request) -> dict:
 
 @router.post("/jobs/{job_id}/stop")
 def stop_job(job_id: str) -> dict:
+    from speechtotext.api import runner
     ok = runner.stop_record_job(job_id)
     if not ok:
         raise HTTPException(status_code=404, detail="job not recording or already stopped")
@@ -99,6 +100,7 @@ def stop_job(job_id: str) -> dict:
 
 @router.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str) -> dict:
+    from speechtotext.api import runner
     ok = runner.cancel_transcribe_job(job_id)
     if not ok:
         raise HTTPException(status_code=404, detail="job not active or already finished")
