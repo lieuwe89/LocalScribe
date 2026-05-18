@@ -15,6 +15,11 @@ def _patch_sf_read():
     )
 
 
+def _patch_torch_from_numpy():
+    """torch.from_numpy mock so tests do not need a working torch runtime."""
+    return patch("torch.from_numpy", return_value=MagicMock())
+
+
 def _fake_annotation(turns: list[tuple[float, float, str]]):
     """Build a fake pyannote 4.x DiarizeOutput wrapping a fake Annotation."""
     ann = MagicMock()
@@ -42,7 +47,7 @@ def test_diarize_returns_speaker_turns(tmp_path: Path):
 
     with patch(
         "pyannote.audio.Pipeline.from_pretrained", return_value=pipeline
-    ), _patch_sf_read():
+    ), _patch_sf_read(), _patch_torch_from_numpy():
         diarizer = PyannoteDiarizer(hf_token="hf_test", backend="cpu")
         turns = diarizer.diarize(wav, num_speakers=None)
 
@@ -63,7 +68,7 @@ def test_diarize_passes_num_speakers_hint(tmp_path: Path):
 
     with patch(
         "pyannote.audio.Pipeline.from_pretrained", return_value=pipeline
-    ), _patch_sf_read():
+    ), _patch_sf_read(), _patch_torch_from_numpy():
         diarizer = PyannoteDiarizer(hf_token="hf_test", backend="cpu")
         diarizer.diarize(wav, num_speakers=3)
 
