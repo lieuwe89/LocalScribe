@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from speechtotext import __version__
 from speechtotext.api.jobs import JobRegistry
 from speechtotext.api.library_db import LibraryDB
 from speechtotext.api.routes_config import router as config_router
@@ -20,7 +21,7 @@ from speechtotext.config import load_config
 
 
 def create_app(library_db_path: Path | None = None) -> FastAPI:
-    app = FastAPI(title="LocalLexis", version="0.1.0")
+    app = FastAPI(title="LocalLexis", version=__version__)
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^(tauri://.*|https?://(localhost|127\.0\.0\.1)(:\d+)?)$",
