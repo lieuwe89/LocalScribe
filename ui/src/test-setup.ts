@@ -6,7 +6,7 @@ import { vi } from 'vitest';
 // it with a plain in-memory store so all tests get a working WebStorage API.
 const _store: Record<string, string> = {};
 const localStorageMock: Storage = {
-  length: 0,
+  get length() { return Object.keys(_store).length; },
   getItem: (key: string) => _store[key] ?? null,
   setItem: (key: string, value: string) => { _store[key] = String(value); },
   removeItem: (key: string) => { delete _store[key]; },

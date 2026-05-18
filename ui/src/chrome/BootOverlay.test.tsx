@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { BootOverlay } from './BootOverlay';
 import { useBackend } from '../stores/backend';
 
@@ -9,6 +9,7 @@ function setBackend(partial: Partial<ReturnType<typeof useBackend.getState>>) {
 
 describe('BootOverlay', () => {
   beforeEach(() => {
+    localStorage.clear();
     useBackend.getState()._resetForTests();
     useBackend.setState({ status: 'starting', elapsedMs: 0, error: null });
   });
@@ -25,7 +26,8 @@ describe('BootOverlay', () => {
     expect(screen.queryByTestId('boot-overlay')).not.toBeInTheDocument();
   });
 
-  it('shows extended message after 15 seconds', () => {
+  it('shows extended message after 15 seconds (subsequent launch)', () => {
+    localStorage.setItem('locallexis.firstLaunchDone', '1');
     setBackend({ elapsedMs: 16000 });
     render(<BootOverlay />);
     expect(screen.getByText(/taking longer than usual/i)).toBeInTheDocument();
@@ -58,7 +60,9 @@ describe('BootOverlay first-launch copy', () => {
 
   it('marks first-launch done when status flips to ready', async () => {
     const { rerender } = render(<BootOverlay />);
-    useBackend.setState({ status: 'ready' });
+    act(() => {
+      useBackend.setState({ status: 'ready' });
+    });
     rerender(<BootOverlay />);
     expect(localStorage.getItem('locallexis.firstLaunchDone')).toBe('1');
   });
