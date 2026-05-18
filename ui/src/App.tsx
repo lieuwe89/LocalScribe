@@ -17,6 +17,8 @@ import { useJobs, startTranscribe, startRecord, stopRecord } from './stores/jobs
 import { useRecording } from './stores/recording';
 import { api } from './api/client';
 import { checkForUpdates } from './updater';
+import { BootOverlay } from './chrome/BootOverlay';
+import { useBackend } from './stores/backend';
 import type { AudioDeviceDto } from './api/types';
 import type { Route } from './types/route';
 
@@ -47,6 +49,7 @@ export default function App() {
   useEffect(() => { refreshLibrary().catch(() => {}); }, [refreshLibrary]);
   useEffect(() => { api<AudioDeviceDto[]>('/devices').then(setDevices).catch(() => {}); }, []);
   useEffect(() => { checkForUpdates(true).catch(() => {}); }, []);
+  useEffect(() => { useBackend.getState().start(); }, []);
   useEffect(() => {
     if (!recording.active || recording.paused) return;
     const id = setInterval(() => useRecording.getState().tick(0.1), 100);
@@ -54,6 +57,8 @@ export default function App() {
   }, [recording.active, recording.paused]);
 
   return (
+    <>
+    <BootOverlay />
     <Window screenLabel={route}>
       <Sidebar
         route={route}
@@ -150,5 +155,6 @@ export default function App() {
         </div>
       </div>
     </Window>
+    </>
   );
 }

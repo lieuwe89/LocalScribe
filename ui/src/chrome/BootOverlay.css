@@ -1,0 +1,52 @@
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--bg, #0d0d0f);
+  color: var(--ink, #e9e9ea);
+  font-family: inherit;
+  -webkit-app-region: drag;
+}
+
+.boot-overlay__logo {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.boot-overlay__spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--ink-muted, #555);
+  border-top-color: var(--ink, #e9e9ea);
+  animation: boot-spin 0.9s linear infinite;
+}
+
+@keyframes boot-spin {
+  to { transform: rotate(360deg); }
+}
+
+.boot-overlay__phase {
+  font-size: 13px;
+  color: var(--ink-muted, #999);
+}
+
+.boot-overlay__extended {
+  max-width: 360px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted, #999);
+  margin-top: 8px;
+}
+
+.boot-overlay__error {
+  color: #f87171;
+  font-size: 13px;
+}
