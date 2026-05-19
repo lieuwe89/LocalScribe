@@ -1,38 +1,103 @@
 import tomllib
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from speechtotext.api.app import create_app
 
 
-def test_config_get_returns_defaults_and_hf_flag(tmp_path: Path, monkeypatch):
+@pytest.fixture
+def client(tmp_path: Path, monkeypatch):
     cfg_path = tmp_path / "config.toml"
     monkeypatch.setattr("speechtotext.api.routes_config.DEFAULT_CONFIG_PATH", cfg_path)
     app = create_app()
-    r = TestClient(app).get("/config")
+    return TestClient(app), cfg_path
+
+
+def test_config_get_returns_defaults_and_hf_flag(client):
+    c, _ = client
+    r = c.get("/config")
     assert r.status_code == 200
     body = r.json()
     assert body["backend"] == "auto"
     assert body["hf_token_set"] is False
 
 
-def test_config_patch_writes_toml(tmp_path: Path, monkeypatch):
-    cfg_path = tmp_path / "config.toml"
-    monkeypatch.setattr("speechtotext.api.routes_config.DEFAULT_CONFIG_PATH", cfg_path)
-    app = create_app()
-    r = TestClient(app).patch("/config", json={"asr_model": "small", "hf_token": "hf_xxx"})
+def test_config_patch_writes_toml(client):
+    c, cfg_path = client
+    r = c.patch("/config", json={"asr_model": "small", "hf_token": "hf_xxx"})
     assert r.status_code == 200
     raw = tomllib.loads(cfg_path.read_text())
     assert raw["asr_model"] == "small"
     assert raw["hf_token"] == "hf_xxx"
 
 
-def test_config_patch_float_debounce_round_trips(tmp_path: Path, monkeypatch):
-    cfg_path = tmp_path / "config.toml"
-    monkeypatch.setattr("speechtotext.api.routes_config.DEFAULT_CONFIG_PATH", cfg_path)
-    app = create_app()
-    r = TestClient(app).patch("/config", json={"watch": {"debounce_seconds": 2.5}})
+def test_config_patch_rejects_unknown_top_level_key(client):
+    c, _ = client
+    r = c.patch("/config", json={"asr_model": "small", "totally_bogus": "yes"})
+    assert r.status_code == 422
+
+
+def test_config_patch_rejects_unknown_watch_key(client):
+    c, _ = client
+    r = c.patch("/config", json={"watch": {"recursive": True, "stranger": 1}})
+    assert r.status_code == 422
+
+
+def test_config_patch_rejects_float_debounce(client):
+    # debounce_seconds is integer seconds; floats should be rejected, not
+    # silently truncated when load_config calls int() on them later.
+    c, _ = client
+    r = c.patch("/config", json={"watch": {"debounce_seconds": 2.5}})
+    assert r.status_code == 422
+
+
+def test_config_patch_rejects_invalid_backend(client):
+    c, _ = client
+    r = c.patch("/config", json={"backend": "tpu"})
+    assert r.status_code == 422
+
+
+def test_config_patch_rejects_invalid_extension(client):
+    c, _ = client
+    r = c.patch("/config", json={"watch": {"extensions": ["mp3", "../etc"]}})
+    assert r.status_code == 422
+
+
+def test_config_patch_escapes_quotes_and_newlines(client):
+    # Hostile values should round-trip safely through TOML — no broken
+    # files, no injection of new TOML keys via embedded newlines.
+    c, cfg_path = client
+    payload = 'hf_"abc"\nbackend = "cuda"\n'
+    r = c.patch("/config", json={"hf_token": payload})
     assert r.status_code == 200
     raw = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
-    assert raw["watch"]["debounce_seconds"] == 2.5
+    assert raw["hf_token"] == payload
+    # Backend was never set; the embedded "backend = cuda" must not leak.
+    assert raw.get("backend") != "cuda"
+
+
+def test_config_patch_partial_watch_preserves_siblings(client):
+    c, cfg_path = client
+    r1 = c.patch(
+        "/config",
+        json={"watch": {"recursive": True, "extensions": ["mp3", "wav"]}},
+    )
+    assert r1.status_code == 200
+    r2 = c.patch("/config", json={"watch": {"debounce_seconds": 7}})
+    assert r2.status_code == 200
+    raw = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+    assert raw["watch"]["debounce_seconds"] == 7
+    assert raw["watch"]["recursive"] is True
+    assert raw["watch"]["extensions"] == ["mp3", "wav"]
+
+
+def test_config_patch_writes_atomically(client):
+    # The temp file must not survive on a successful write; it must be
+    # renamed onto the target path, leaving exactly one config file.
+    c, cfg_path = client
+    r = c.patch("/config", json={"asr_model": "small"})
+    assert r.status_code == 200
+    siblings = list(cfg_path.parent.iterdir())
+    assert siblings == [cfg_path]

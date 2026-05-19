@@ -1,13 +1,59 @@
 from __future__ import annotations
 
+import json
+import os
+import re
+import tempfile
+import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from speechtotext.config import DEFAULT_CONFIG_PATH, load_config
 
 router = APIRouter()
+
+_EXT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
+_TOP_KEYS = ("backend", "asr_model", "hf_token", "model_cache_dir", "default_out_dir")
+_WATCH_KEYS = ("recursive", "debounce_seconds", "extensions")
+
+
+class WatchPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    recursive: bool | None = None
+    debounce_seconds: int | None = Field(default=None, ge=0, le=3600)
+    extensions: list[str] | None = None
+
+    @field_validator("extensions")
+    @classmethod
+    def _ext_strings_valid(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        for ext in v:
+            if not isinstance(ext, str) or not _EXT_RE.match(ext):
+                raise ValueError(f"invalid extension: {ext!r}")
+        return v
+
+
+class ConfigPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    backend: Literal["auto", "cpu", "cuda", "mps"] | None = None
+    asr_model: str | None = Field(default=None, min_length=1, max_length=128)
+    hf_token: str | None = Field(default=None, max_length=512)
+    model_cache_dir: str | None = Field(default=None, max_length=4096)
+    default_out_dir: str | None = Field(default=None, max_length=4096)
+    watch: WatchPatch | None = None
+
+    @field_validator(
+        "asr_model", "hf_token", "model_cache_dir", "default_out_dir"
+    )
+    @classmethod
+    def _no_null_bytes(cls, v: str | None) -> str | None:
+        if v is not None and "\x00" in v:
+            raise ValueError("null byte in value")
+        return v
 
 
 def _public(cfg) -> dict:
@@ -25,6 +71,54 @@ def _public(cfg) -> dict:
     }
 
 
+def _toml_value(v: Any) -> str:
+    # bool must come before int (bool is a subclass of int)
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, float):
+        return repr(v)
+    if isinstance(v, str):
+        # JSON basic-string escapes are a strict subset of TOML basic-string
+        # escapes, so json.dumps produces a valid TOML literal for any
+        # validator-accepted string (no raw control chars, no null bytes).
+        return json.dumps(v, ensure_ascii=False)
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    raise TypeError(f"unsupported TOML value: {type(v).__name__}")
+
+
+def _dump_toml(d: dict[str, Any]) -> str:
+    lines: list[str] = []
+    for k in _TOP_KEYS:
+        if k in d:
+            lines.append(f"{k} = {_toml_value(d[k])}")
+    watch = d.get("watch")
+    if isinstance(watch, dict):
+        lines.append("")
+        lines.append("[watch]")
+        for k in _WATCH_KEYS:
+            if k in watch:
+                lines.append(f"{k} = {_toml_value(watch[k])}")
+    return "\n".join(lines) + "\n"
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".cfg.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 @router.get("/config")
 def get_config() -> dict:
     cfg = load_config(config_path=DEFAULT_CONFIG_PATH)
@@ -32,38 +126,26 @@ def get_config() -> dict:
 
 
 @router.patch("/config")
-def patch_config(updates: dict[str, Any]) -> dict:
+def patch_config(updates: ConfigPatch) -> dict:
     path: Path = DEFAULT_CONFIG_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
+
     existing: dict[str, Any] = {}
     if path.exists():
-        import tomllib
-        existing = tomllib.loads(path.read_text())
-    existing.update({k: v for k, v in updates.items() if not isinstance(v, dict)})
-    if isinstance(updates.get("watch"), dict):
-        existing.setdefault("watch", {}).update(updates["watch"])
+        existing = tomllib.loads(path.read_text(encoding="utf-8"))
 
-    def _dump_toml(d: dict) -> str:
-        lines: list[str] = []
-        for k, v in d.items():
-            if k == "watch":
-                continue
-            lines.append(_kv(k, v))
-        if "watch" in d:
-            lines.append("\n[watch]")
-            for k, v in d["watch"].items():
-                lines.append(_kv(k, v))
-        return "\n".join(lines) + "\n"
+    patch = updates.model_dump(exclude_none=True)
 
-    def _kv(k: str, v) -> str:
-        if isinstance(v, bool):
-            return f"{k} = {'true' if v else 'false'}"
-        if isinstance(v, (int, float)):
-            return f"{k} = {v}"
-        if isinstance(v, list):
-            inside = ", ".join(f'"{x}"' for x in v)
-            return f"{k} = [{inside}]"
-        return f'{k} = "{v}"'
+    for k in _TOP_KEYS:
+        if k in patch:
+            existing[k] = patch[k]
 
-    path.write_text(_dump_toml(existing), encoding="utf-8")
+    if "watch" in patch:
+        watch_existing = existing.get("watch")
+        if not isinstance(watch_existing, dict):
+            watch_existing = {}
+        for k, v in patch["watch"].items():
+            watch_existing[k] = v
+        existing["watch"] = watch_existing
+
+    _atomic_write(path, _dump_toml(existing))
     return _public(load_config(config_path=path))
