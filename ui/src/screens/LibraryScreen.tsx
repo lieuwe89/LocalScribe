@@ -68,7 +68,7 @@ export function LibraryScreen({ setRoute, setTid }: Props) {
             const date = i.created_at?.slice(0, 10) || '—';
             return (
               <div key={i.id}
-                   className={'lib-row' + (i.error ? ' has-error' : '') + (i.snippet ? ' has-snippet' : '')}
+                   className={'lib-row' + (i.error ? ' has-error' : '') + (i.snippet_parts && i.snippet_parts.length > 0 ? ' has-snippet' : '')}
                    onClick={async () => {
                      try { await load(i.id); setTid(i.id); setRoute('complete'); } catch {}
                    }}>
@@ -82,12 +82,14 @@ export function LibraryScreen({ setRoute, setTid }: Props) {
                   <span className="status">{i.error ? '⚠' : '✓'}</span>
                   <span className="chev"><Icon name="chev" size={12} /></span>
                 </div>
-                {i.snippet && (
-                  <div
-                    className="lib-snippet"
-                    // FTS5 snippet() wraps matches in <mark> tags we control.
-                    dangerouslySetInnerHTML={{ __html: i.snippet }}
-                  />
+                {i.snippet_parts && i.snippet_parts.length > 0 && (
+                  <div className="lib-snippet">
+                    {i.snippet_parts.map((p, idx) =>
+                      p.match
+                        ? <mark key={idx}>{p.text}</mark>
+                        : <span key={idx}>{p.text}</span>
+                    )}
+                  </div>
                 )}
               </div>
             );

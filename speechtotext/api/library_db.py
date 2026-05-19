@@ -34,6 +34,12 @@ _log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 
+# Private-use Unicode sentinels for FTS5 snippet() match markers. We split on
+# these in Python and return plain-text parts so the frontend never receives
+# HTML and can't accidentally render hostile transcript text as DOM.
+_SNIPPET_START = ""
+_SNIPPET_END = ""
+
 
 def default_app_data_dir() -> Path:
     """Platform-appropriate writable app-data dir for LocalLexis."""
@@ -157,6 +163,32 @@ def _meta_string(doc: dict, audio_basename: str) -> str:
     if audio_basename:
         bits.append(audio_basename)
     return " ".join(bits)
+
+
+def _parse_snippet(raw: str) -> list[dict]:
+    """Split an FTS5 snippet() result into [{text, match}] parts.
+
+    The SQL uses private-use sentinels around matches; we split on them so
+    the API returns structured text the client renders with React's normal
+    escaping (via <mark>), never as raw HTML.
+    """
+    if not raw:
+        return []
+    parts: list[dict] = []
+    chunks = raw.split(_SNIPPET_START)
+    head = chunks[0]
+    if head:
+        parts.append({"text": head, "match": False})
+    for chunk in chunks[1:]:
+        if _SNIPPET_END in chunk:
+            match_text, trailing = chunk.split(_SNIPPET_END, 1)
+        else:
+            match_text, trailing = chunk, ""
+        if match_text:
+            parts.append({"text": match_text, "match": True})
+        if trailing:
+            parts.append({"text": trailing, "match": False})
+    return parts
 
 
 def _quote_fts(query: str) -> str:
@@ -413,7 +445,7 @@ class LibraryDB:
                 SELECT t.id, t.json_path, t.audio_path, t.duration_seconds,
                        t.language, t.speakers_count, t.created_at,
                        t.models_asr, t.models_diarizer, t.error,
-                       snippet(transcripts_fts, 0, '<mark>', '</mark>', '…', 24) AS snippet,
+                       snippet(transcripts_fts, 0, ?, ?, '…', 24) AS snippet,
                        bm25(transcripts_fts, 4.0, 6.0, 3.0, 2.0) AS rank
                 FROM transcripts_fts
                 JOIN transcripts t ON t.rowid = transcripts_fts.rowid
@@ -421,12 +453,12 @@ class LibraryDB:
                 ORDER BY rank ASC
                 LIMIT ?
                 """,
-                (match, limit),
+                (_SNIPPET_START, _SNIPPET_END, match, limit),
             ).fetchall()
         items = []
         for r in rows:
             item = self._row_to_item(r)
-            item["snippet"] = r["snippet"]
+            item["snippet_parts"] = _parse_snippet(r["snippet"])
             items.append(item)
         return items
 

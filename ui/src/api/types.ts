@@ -28,8 +28,13 @@ export interface TranscriptListItem {
   created_at?: string;
   models?: Record<string, string>;
   error?: string;
-  /** HTML snippet from FTS5 (with <mark> tags). Only set on search results. */
-  snippet?: string;
+  /**
+   * Plain-text snippet parts from FTS5. Each part is either a normal
+   * fragment (`match: false`) or a matched fragment to highlight with
+   * <mark>. Rendered with React text nodes — never HTML — so hostile
+   * transcript text cannot become DOM. Only set on search results.
+   */
+  snippet_parts?: { text: string; match: boolean }[];
 }
 
 export interface TranscriptSegment {

@@ -83,8 +83,37 @@ def test_search_finds_content(db: LibraryDB, tmp_path: Path):
     hits = db.search("climate")
     assert len(hits) == 1
     assert hits[0]["id"] == "a"
-    assert "snippet" in hits[0]
-    assert "<mark>" in hits[0]["snippet"]
+    assert "snippet_parts" in hits[0]
+    parts = hits[0]["snippet_parts"]
+    assert any(p["match"] and "climate" in p["text"].lower() for p in parts)
+    # API returns plain text only — no HTML markers leak through.
+    combined = "".join(p["text"] for p in parts)
+    assert "<mark>" not in combined
+    assert "" not in combined and "" not in combined
+
+
+def test_search_snippet_parts_carry_hostile_text_as_plain_text(
+    db: LibraryDB, tmp_path: Path
+):
+    # If a transcript ever contained markup (e.g. via OCR / manual edit /
+    # malicious watch dir), the search response must return it as plain
+    # text — never as HTML the client could render.
+    hostile = '<img src=x onerror=alert(1)> dangerous payload here'
+    _write(tmp_path, "a", _make_doc([(0.0, 2.0, "SPEAKER_00", hostile)]))
+    db.sync_dirs([tmp_path])
+    hits = db.search("dangerous")
+    assert len(hits) == 1
+    parts = hits[0]["snippet_parts"]
+    # Shape: every part is {text, match} only — no html, no markup.
+    assert parts and all(set(p.keys()) == {"text", "match"} for p in parts)
+    # Hostile string survives round-trip as text.
+    combined = "".join(p["text"] for p in parts)
+    assert "<img src=x onerror=alert(1)>" in combined
+    # Match flag falls on the queried token, not on the HTML.
+    assert any(p["match"] and "dangerous" in p["text"].lower() for p in parts)
+    # No HTML or sentinel leakage.
+    assert "<mark>" not in combined
+    assert "" not in combined and "" not in combined
 
 
 def test_search_finds_filename(db: LibraryDB, tmp_path: Path):
