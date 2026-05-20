@@ -469,6 +469,53 @@ class LibraryDB:
             ).fetchone()
         return Path(row["json_path"]) if row else None
 
+    def list_since(self, since: float, limit: int = 10000) -> list[dict]:
+        """Return transcripts whose json file mtime is greater than ``since``.
+
+        Used by the sync delta endpoint to enumerate transcripts that
+        have changed since the device's last sync cursor. Returns rows
+        ordered by mtime ascending so callers can use the last row's
+        mtime as the next cursor.
+
+        The returned dicts carry ``json_path`` and ``json_mtime`` in
+        addition to the usual library-listing fields, so callers can
+        load the full transcript JSON from disk.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT id, json_path, audio_path, duration_seconds, language,
+                       speakers_count, created_at, models_asr, models_diarizer,
+                       error, json_mtime
+                FROM transcripts
+                WHERE json_mtime > ?
+                ORDER BY json_mtime ASC
+                LIMIT ?
+                """,
+                (since, limit),
+            ).fetchall()
+        items = []
+        for r in rows:
+            item = self._row_to_item(r)
+            # _row_to_item exposes the JSON path as `path`. Surface it
+            # under both names so sync delta callers (which load the
+            # full doc from disk) don't have to know the indirection.
+            item["json_path"] = r["json_path"]
+            item["json_mtime"] = r["json_mtime"]
+            items.append(item)
+        return items
+
+    def max_mtime(self) -> float:
+        """Return the largest json_mtime in the index, or 0 if empty.
+
+        Useful as the initial cursor returned by ``/sync/snapshot``.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT MAX(json_mtime) AS m FROM transcripts"
+            ).fetchone()
+        return float(row["m"]) if row and row["m"] is not None else 0.0
+
     def close(self) -> None:
         with self._lock:
             self._conn.close()

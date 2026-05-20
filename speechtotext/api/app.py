@@ -20,6 +20,7 @@ from speechtotext.api.routes_devices import router as devices_router
 from speechtotext.api.routes_jobs import router as jobs_router
 from speechtotext.api.routes_models import router as models_router
 from speechtotext.api.routes_pairing import router as pairing_router
+from speechtotext.api.routes_sync import router as sync_router
 from speechtotext.api.routes_transcripts import router as transcripts_router
 from speechtotext.api.routes_watch import router as watch_router
 from speechtotext.api.warmup import warm_microphone_in_background
@@ -112,6 +113,7 @@ def create_app(
     app.include_router(jobs_router)
     app.include_router(models_router)
     app.include_router(pairing_router)
+    app.include_router(sync_router)
     app.include_router(transcripts_router)
     app.include_router(watch_router)
 

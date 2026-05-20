@@ -1,0 +1,212 @@
+"""Tests for /sync/snapshot and /sync/since/{cursor}."""
+
+from __future__ import annotations
+
+import base64
+import json
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from nacl.signing import SigningKey
+
+from speechtotext.api.app import create_app
+
+
+def _make_doc(audio_path: Path, speakers: dict[str, str] | None = None) -> dict:
+    return {
+        "version": 2,
+        "audio_path": str(audio_path),
+        "duration_seconds": 5.0,
+        "language": "en",
+        "speakers": speakers or {"SPEAKER_00": "Alice"},
+        "segments": [
+            {"start": 0.0, "end": 1.0, "speaker": "SPEAKER_00", "text": "hi"}
+        ],
+        "models": {"asr": "faster-whisper:tiny"},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "_workspace_id": "ws_test",
+        "_clocks": {},
+        "_history": [],
+    }
+
+
+def _write_transcript(tmp_path: Path, name: str, doc: dict | None = None) -> Path:
+    audio = tmp_path / f"{name}.mp3"
+    audio.write_bytes(b"fake")
+    json_path = audio.with_suffix(".json")
+    json_path.write_text(json.dumps(doc or _make_doc(audio)))
+    return json_path
+
+
+@pytest.fixture
+def app(tmp_path):
+    app = create_app(library_db_path=tmp_path / "library.db")
+    app.state.library_dirs.add(tmp_path)
+    return app
+
+
+def _pair(client: TestClient):
+    token = client.post("/pair/tokens").json()["token"]
+    sk = SigningKey.generate()
+    r = client.post(
+        "/pair",
+        json={
+            "token": token,
+            "device_pubkey_b64": base64.b64encode(
+                bytes(sk.verify_key)
+            ).decode("ascii"),
+            "device_name": "test-device",
+        },
+    )
+    return sk, r.json()["device_id"]
+
+
+def _signed_get(client, sk, device_id, path: str):
+    msg = b"GET\n" + path.encode("ascii") + b"\n"  # empty body
+    sig = sk.sign(msg).signature
+    return client.get(
+        path,
+        headers={
+            "X-Device-Id": device_id,
+            "X-Signature-B64": base64.b64encode(sig).decode("ascii"),
+        },
+    )
+
+
+# ── Snapshot ──────────────────────────────────────────────────────────────
+
+
+class TestSyncSnapshot:
+    def test_empty_library(self, app):
+        client = TestClient(app)
+        sk, dev_id = _pair(client)
+        r = _signed_get(client, sk, dev_id, "/sync/snapshot")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["transcripts"] == []
+        assert body["cursor"] == 0.0
+        assert body["workspace_id"].startswith("ws_")
+
+    def test_returns_all_transcripts(self, app, tmp_path):
+        _write_transcript(tmp_path, "a")
+        _write_transcript(tmp_path, "b")
+        _write_transcript(tmp_path, "c")
+        client = TestClient(app)
+        sk, dev_id = _pair(client)
+        r = _signed_get(client, sk, dev_id, "/sync/snapshot")
+        body = r.json()
+        ids = sorted(d["audio_path"].split("/")[-1] for d in body["transcripts"])
+        assert ids == ["a.mp3", "b.mp3", "c.mp3"]
+        assert body["cursor"] > 0
+
+    def test_response_shape(self, app, tmp_path):
+        _write_transcript(tmp_path, "a")
+        client = TestClient(app)
+        sk, dev_id = _pair(client)
+        r = _signed_get(client, sk, dev_id, "/sync/snapshot")
+        body = r.json()
+        assert set(body.keys()) == {"workspace_id", "cursor", "transcripts"}
+        assert "speakers" in body["transcripts"][0]
+
+
+# ── Since ─────────────────────────────────────────────────────────────────
+
+
+class TestSyncSince:
+    def test_returns_only_newer_transcripts(self, app, tmp_path):
+        _write_transcript(tmp_path, "old")
+        client = TestClient(app)
+        sk, dev_id = _pair(client)
+        # Take a snapshot to learn the current cursor.
+        snap = _signed_get(client, sk, dev_id, "/sync/snapshot").json()
+        cursor = snap["cursor"]
+        # Add a new transcript whose mtime is strictly later.
+        time.sleep(0.02)
+        _write_transcript(tmp_path, "new")
+        # /sync/since with the snapshot cursor should return only "new".
+        r = _signed_get(client, sk, dev_id, f"/sync/since/{cursor}")
+        body = r.json()
+        names = [d["audio_path"].split("/")[-1] for d in body["transcripts"]]
+        assert names == ["new.mp3"]
+        assert body["cursor"] > cursor
+
+    def test_no_changes_advances_to_max_seen(self, app, tmp_path):
+        _write_transcript(tmp_path, "a")
+        client = TestClient(app)
+        sk, dev_id = _pair(client)
+        snap = _signed_get(client, sk, dev_id, "/sync/snapshot").json()
+        cursor = snap["cursor"]
+        # Poll again with that cursor — nothing has changed.
+        r = _signed_get(client, sk, dev_id, f"/sync/since/{cursor}")
+        body = r.json()
+        assert body["transcripts"] == []
+        # Cursor stays at the same point (no transcripts > cursor).
+        assert body["cursor"] == cursor
+
+    def test_cursor_zero_equivalent_to_snapshot(self, app, tmp_path):
+        _write_transcript(tmp_path, "a")
+        _write_transcript(tmp_path, "b")
+        client = TestClient(app)
+        sk, dev_id = _pair(client)
+        snap = _signed_get(client, sk, dev_id, "/sync/snapshot").json()
+        since_zero = _signed_get(client, sk, dev_id, "/sync/since/0").json()
+        # Both return the same docs (order independent — compare as sets
+        # via id field stand-in: the audio_path basename).
+        snap_names = {
+            d["audio_path"].split("/")[-1] for d in snap["transcripts"]
+        }
+        since_names = {
+            d["audio_path"].split("/")[-1] for d in since_zero["transcripts"]
+        }
+        assert snap_names == since_names
+
+    def test_picks_up_patched_transcript(self, app, tmp_path):
+        """A PATCH to an existing transcript updates its mtime; the next
+        /sync/since with the prior cursor must surface it."""
+        _write_transcript(tmp_path, "a")
+        client = TestClient(app)
+        sk, dev_id = _pair(client)
+        snap = _signed_get(client, sk, dev_id, "/sync/snapshot").json()
+        cursor = snap["cursor"]
+        # Wait so mtime tick is observable across filesystems.
+        time.sleep(0.02)
+        # Patch the speaker label.
+        body = {
+            "op": "relabel",
+            "key": "speakers.SPEAKER_00",
+            "value": "Renamed",
+            "device": "test",
+            "lamport_observed": 0,
+        }
+        body_bytes = json.dumps(body).encode()
+        sig = sk.sign(
+            b"PATCH\n/transcripts/a\n" + body_bytes
+        ).signature
+        patch_r = client.patch(
+            "/transcripts/a",
+            content=body_bytes,
+            headers={
+                "Content-Type": "application/json",
+                "X-Device-Id": dev_id,
+                "X-Signature-B64": base64.b64encode(sig).decode("ascii"),
+            },
+        )
+        assert patch_r.status_code == 200, patch_r.text
+        # Now poll for changes since the original cursor.
+        r = _signed_get(client, sk, dev_id, f"/sync/since/{cursor}")
+        body = r.json()
+        assert len(body["transcripts"]) == 1
+        assert (
+            body["transcripts"][0]["speakers"]["SPEAKER_00"] == "Renamed"
+        )
+
+    def test_unauthenticated_returns_401(self, app, tmp_path):
+        _write_transcript(tmp_path, "a")
+        client = TestClient(app)
+        r = client.get("/sync/snapshot")
+        assert r.status_code == 401
+        r = client.get("/sync/since/0")
+        assert r.status_code == 401
