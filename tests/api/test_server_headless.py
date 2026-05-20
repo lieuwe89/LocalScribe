@@ -81,3 +81,42 @@ class TestRunBackwardsCompat:
         assert '"port": 12345' in captured.out
         assert fake_uvicorn[0]["host"] == "127.0.0.1"
         assert fake_uvicorn[0]["port"] == 12345
+
+
+class TestHeadlessTls:
+    """LOCALLEXIS_TLS_ENABLED toggle drives uvicorn's ssl_* args."""
+
+    def test_tls_disabled_by_default(self, fake_uvicorn, monkeypatch) -> None:
+        for var in ("LOCALLEXIS_HOST", "LOCALLEXIS_PORT", "LOCALLEXIS_TLS_ENABLED"):
+            monkeypatch.delenv(var, raising=False)
+        server.headless()
+        call = fake_uvicorn[0]
+        assert "ssl_certfile" not in call
+        assert "ssl_keyfile" not in call
+
+    @pytest.mark.parametrize("flag", ["1", "true", "TRUE", "yes", "on"])
+    def test_tls_enabled_resolves_cert_paths(
+        self, fake_uvicorn, monkeypatch, tmp_path, flag
+    ) -> None:
+        monkeypatch.setenv("LOCALLEXIS_TLS_ENABLED", flag)
+        monkeypatch.delenv("LOCALLEXIS_HOST", raising=False)
+        monkeypatch.delenv("LOCALLEXIS_PORT", raising=False)
+        # Redirect the tls module's app-data dir into the test tmp path
+        # so we don't generate a real cert under the user's home.
+        import speechtotext.api.tls as _tls
+
+        monkeypatch.setattr(_tls, "default_app_data_dir", lambda: tmp_path)
+        server.headless()
+        call = fake_uvicorn[0]
+        assert call["ssl_certfile"] == str(tmp_path / "hub-cert.pem")
+        assert call["ssl_keyfile"] == str(tmp_path / "hub-key.pem")
+        # Cert + key files were actually generated.
+        assert (tmp_path / "hub-cert.pem").exists()
+        assert (tmp_path / "hub-key.pem").exists()
+
+    def test_tls_falsy_values_skip(
+        self, fake_uvicorn, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("LOCALLEXIS_TLS_ENABLED", "0")
+        server.headless()
+        assert "ssl_certfile" not in fake_uvicorn[0]

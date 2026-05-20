@@ -19,6 +19,7 @@ def _isolated_app_data(tmp_path_factory, monkeypatch):
     """
     import speechtotext.api.library_db as _library_db
     import speechtotext.api.secrets_store as _secrets_store
+    import speechtotext.api.tls as _tls
     import speechtotext.api.workspace as _workspace
 
     data_dir = tmp_path_factory.mktemp("appdata")
@@ -28,12 +29,13 @@ def _isolated_app_data(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(
         _library_db, "default_db_path", lambda: data_dir / "library.db"
     )
-    # workspace.py and secrets_store.py import default_app_data_dir at
-    # module load, so we patch the module-local bindings too.
+    # workspace, secrets_store, and tls all import default_app_data_dir
+    # at module load, so we patch each module-local binding too.
     monkeypatch.setattr(_workspace, "default_app_data_dir", lambda: data_dir)
     monkeypatch.setattr(
         _secrets_store, "default_app_data_dir", lambda: data_dir
     )
+    monkeypatch.setattr(_tls, "default_app_data_dir", lambda: data_dir)
 
 
 def pytest_collection_modifyitems(config, items):

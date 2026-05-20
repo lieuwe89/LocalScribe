@@ -27,23 +27,31 @@ def run(host: str = "127.0.0.1", port: int | None = None, print_handshake: bool 
     uvicorn.run(create_app(), host=host, port=p, log_level="warning")
 
 
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def headless() -> None:
     """Standalone hub entry: binds 0.0.0.0 on a stable port.
 
     Used by the headless deployment (Docker image, systemd unit, NAS /
-    VPS install). Defaults:
+    VPS install) and by the Tauri shell when "hub mode" is on.
 
-    - host: ``0.0.0.0`` (override via ``LOCALLEXIS_HOST``)
-    - port: ``8765``    (override via ``LOCALLEXIS_PORT``)
+    Defaults:
 
-    No stdout handshake — the Tauri shell is the only caller that
-    needs it. Log level is ``info`` so operators see request logs.
+    - host: ``0.0.0.0``  (override via ``LOCALLEXIS_HOST``)
+    - port: ``8765``     (override via ``LOCALLEXIS_PORT``)
+    - tls:  off          (enable via ``LOCALLEXIS_TLS_ENABLED=1``)
 
-    Why a separate entry point at all? The Tauri-spawned ``run`` binds
-    ``127.0.0.1`` and picks a random port, which is correct for a
-    single-machine desktop install but useless on a server where the
-    phone must reach the hub over the LAN. ``headless`` is the
-    server-mode equivalent.
+    When ``LOCALLEXIS_TLS_ENABLED`` is truthy, the sidecar serves
+    HTTPS using the self-signed cert at
+    ``<app-data>/hub-cert.pem`` (auto-generated on first call). Mobile
+    clients are expected to pin the cert's SPKI fingerprint via the
+    pairing QR rather than rely on hostname matching.
+
+    No stdout handshake — the Tauri shell uses ``run`` for the
+    localhost sidecar lifecycle that needs the handshake; ``headless``
+    is the LAN/server entry.
     """
     host = os.environ.get("LOCALLEXIS_HOST", "0.0.0.0")
     try:
@@ -53,4 +61,16 @@ def headless() -> None:
             f"LOCALLEXIS_PORT must be an integer, got "
             f"{os.environ.get('LOCALLEXIS_PORT')!r}: {exc}"
         )
-    uvicorn.run(create_app(), host=host, port=port, log_level="info")
+
+    kwargs: dict = {"host": host, "port": port, "log_level": "info"}
+
+    if _env_truthy("LOCALLEXIS_TLS_ENABLED"):
+        # Lazy import so non-TLS callers don't pay the cryptography
+        # import cost (and tests can monkeypatch the resolver).
+        from speechtotext.api.tls import get_or_create_tls
+
+        cert_path, key_path = get_or_create_tls()
+        kwargs["ssl_certfile"] = str(cert_path)
+        kwargs["ssl_keyfile"] = str(key_path)
+
+    uvicorn.run(create_app(), **kwargs)
