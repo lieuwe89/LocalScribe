@@ -23,6 +23,19 @@ from speechtotext.api.workspace import get_lamport, get_workspace_id
 router = APIRouter()
 
 
+class PairedDevice(BaseModel):
+    """Hub-admin view of a paired device. Pubkey deliberately omitted."""
+
+    device_id: str
+    name: str
+    paired_at: str
+    last_seen: str | None = None
+
+
+class PairedDevicesResponse(BaseModel):
+    devices: list[PairedDevice]
+
+
 class MintTokenResponse(BaseModel):
     """Hub UI receives this after ``POST /pair/tokens``."""
 
@@ -64,6 +77,33 @@ class PairResponse(BaseModel):
 
 def _store(request: Request) -> PairingTokenStore:
     return request.app.state.pairing_tokens
+
+
+@router.get("/devices/paired", response_model=PairedDevicesResponse)
+def list_paired_devices(request: Request) -> PairedDevicesResponse:
+    """List all paired devices.
+
+    Hub-admin information — the bearer-token middleware (set by the
+    Tauri launcher) gates this from LAN access. Devices on the LAN
+    don't have the bearer token, only their Ed25519 signing key, and
+    this endpoint is not signed-request gated.
+
+    The pubkey is intentionally not exposed; it's an implementation
+    detail that should never leak to clients.
+    """
+    registry = request.app.state.device_registry
+    rows = registry.list_all()
+    return PairedDevicesResponse(
+        devices=[
+            PairedDevice(
+                device_id=r["device_id"],
+                name=r["name"],
+                paired_at=r["paired_at"],
+                last_seen=r.get("last_seen"),
+            )
+            for r in rows
+        ]
+    )
 
 
 @router.post("/pair/tokens", response_model=MintTokenResponse)

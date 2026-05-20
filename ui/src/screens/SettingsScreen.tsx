@@ -1,7 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useConfig } from '../stores/config';
 import { api } from '../api/client';
 import type { ConfigDto } from '../api/types';
+
+interface HubState {
+  enabled: boolean;
+  port: number;
+}
+
+interface PairedDevice {
+  device_id: string;
+  name: string;
+  paired_at: string;
+  last_seen: string | null;
+}
+
+interface PairingToken {
+  token: string;
+  expires_at: number;
+  workspace_id: string;
+  ttl_seconds: number;
+}
 
 type Draft = Partial<ConfigDto> & { hf_token?: string };
 
@@ -67,12 +87,66 @@ export function SettingsScreen() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [models, setModels] = useState<ModelStatus[] | null>(null);
+  const [hub, setHub] = useState<HubState | null>(null);
+  const [hubBusy, setHubBusy] = useState(false);
+  const [devices, setDevices] = useState<PairedDevice[]>([]);
+  const [pairingToken, setPairingToken] = useState<PairingToken | null>(null);
+  const [pairingError, setPairingError] = useState<string | null>(null);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     api<ModelStatus[]>('/models/whisper').then(setModels).catch(() => setModels([]));
   }, []);
+  // Load hub state once on mount. Failure is silent — older sidecars
+  // without the hub_state command leave `hub` null and the UI hides
+  // the section.
+  useEffect(() => {
+    invoke<HubState>('get_hub_state').then(setHub).catch(() => setHub(null));
+  }, []);
+  // Refresh paired devices whenever hub mode flips, so the list shown
+  // matches the current mode (and so toggling off then on doesn't
+  // leave stale entries on screen).
+  useEffect(() => {
+    if (!hub) return;
+    api<{ devices: PairedDevice[] }>('/devices/paired')
+      .then(r => setDevices(r.devices))
+      .catch(() => setDevices([]));
+  }, [hub?.enabled]);
   if (!cfg) return <div className="settings"><p style={{ color: 'var(--ink-muted)' }}>Loading…</p></div>;
+
+  const toggleHub = async (enabled: boolean) => {
+    if (!hub) return;
+    setHubBusy(true);
+    setPairingToken(null);
+    setPairingError(null);
+    try {
+      const updated = await invoke<HubState>('set_hub_state', { enabled, port: hub.port });
+      setHub(updated);
+    } catch (e) {
+      setPairingError(`failed to ${enabled ? 'enable' : 'disable'} hub: ${e}`);
+    } finally {
+      setHubBusy(false);
+    }
+  };
+
+  const mintPairingToken = async () => {
+    setPairingError(null);
+    try {
+      const r = await api<PairingToken>('/pair/tokens', { method: 'POST' });
+      setPairingToken(r);
+    } catch (e) {
+      setPairingError(String(e));
+    }
+  };
+
+  const refreshDevices = async () => {
+    try {
+      const r = await api<{ devices: PairedDevice[] }>('/devices/paired');
+      setDevices(r.devices);
+    } catch {
+      /* swallow; sticky list rather than blanking */
+    }
+  };
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => {
     setDraft(d => ({ ...d, [k]: v }));
@@ -153,6 +227,84 @@ export function SettingsScreen() {
           {dirty ? (saving ? 'Saving…' : 'Save') : 'Saved'}
         </button>
       </div>
+
+      {hub && (
+        <section className="hub-mode" style={{ marginTop: '2rem', borderTop: '1px solid var(--rule)', paddingTop: '1.25rem' }}>
+          <h2 style={{ margin: '0 0 0.5rem' }}>Hub mode</h2>
+          <p style={{ color: 'var(--ink-muted)', marginTop: 0 }}>
+            Expose this app's API on the local network so paired phones,
+            tablets, or other LocalLexis installs can sync transcripts.
+            Off by default — only turn it on if you actually want remote
+            devices to reach this machine.
+          </p>
+          <Field label={`Hub mode ${hub.enabled ? `on (port ${hub.port})` : 'off'}`}>
+            <input
+              type="checkbox"
+              checked={hub.enabled}
+              disabled={hubBusy}
+              onChange={(e) => toggleHub(e.target.checked)}
+            />
+          </Field>
+
+          {hub.enabled && (
+            <>
+              <h3 style={{ marginBottom: '0.25rem' }}>Pair a new device</h3>
+              <p style={{ color: 'var(--ink-muted)', marginTop: 0, fontSize: '0.9em' }}>
+                Click to mint a single-use pairing code (5 minute TTL).
+                The device scans the resulting JSON as a QR code; future
+                releases will render the QR inline.
+              </p>
+              <button type="button" onClick={mintPairingToken} disabled={hubBusy}>
+                Generate pairing code
+              </button>
+              {pairingToken && (
+                <pre
+                  style={{
+                    background: 'var(--bg-muted, #f5f3ec)',
+                    padding: '0.75rem',
+                    marginTop: '0.5rem',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.85em',
+                    overflowX: 'auto',
+                  }}
+                >
+                  {JSON.stringify(pairingToken, null, 2)}
+                </pre>
+              )}
+              {pairingError && (
+                <p style={{ color: 'var(--ink-error, crimson)' }}>{pairingError}</p>
+              )}
+
+              <h3 style={{ margin: '1.25rem 0 0.25rem' }}>
+                Paired devices ({devices.length})
+              </h3>
+              <button type="button" onClick={refreshDevices}>
+                Refresh
+              </button>
+              {devices.length === 0 ? (
+                <p style={{ color: 'var(--ink-muted)' }}>
+                  No devices paired yet.
+                </p>
+              ) : (
+                <ul style={{ listStyle: 'none', padding: 0 }}>
+                  {devices.map((d) => (
+                    <li key={d.device_id} style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--rule, #e5e0d3)' }}>
+                      <div><strong>{d.name}</strong> <code style={{ fontSize: '0.85em', color: 'var(--ink-muted)' }}>{d.device_id}</code></div>
+                      <div style={{ fontSize: '0.85em', color: 'var(--ink-muted)' }}>
+                        paired {d.paired_at.slice(0, 16).replace('T', ' ')}
+                        {' · '}
+                        {d.last_seen
+                          ? `last seen ${d.last_seen.slice(0, 16).replace('T', ' ')}`
+                          : 'never seen'}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </section>
+      )}
     </div>
   );
 }

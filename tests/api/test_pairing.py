@@ -243,3 +243,78 @@ class TestPairEndpoint:
         curve_private = sk.to_curve25519_private_key()
         decrypted = SealedBox(curve_private).decrypt(sealed)
         assert decrypted == get_workspace_key()
+
+
+# ── /devices/paired endpoint ─────────────────────────────────────────────
+
+
+class TestListPairedDevices:
+    def _b64(self, raw: bytes) -> str:
+        return base64.b64encode(raw).decode("ascii")
+
+    def test_empty_initially(self, app) -> None:
+        client = TestClient(app)
+        r = client.get("/devices/paired")
+        assert r.status_code == 200
+        assert r.json() == {"devices": []}
+
+    def test_lists_paired_devices(self, app) -> None:
+        client = TestClient(app)
+        # Pair two devices.
+        for name in ("ipad-A", "ipad-B"):
+            token = client.post("/pair/tokens").json()["token"]
+            sk = SigningKey.generate()
+            client.post(
+                "/pair",
+                json={
+                    "token": token,
+                    "device_pubkey_b64": self._b64(bytes(sk.verify_key)),
+                    "device_name": name,
+                },
+            )
+        r = client.get("/devices/paired")
+        assert r.status_code == 200
+        body = r.json()
+        names = {d["name"] for d in body["devices"]}
+        assert names == {"ipad-A", "ipad-B"}
+
+    def test_pubkey_not_exposed(self, app) -> None:
+        """Pubkey must never appear in the listing — it's an internal
+        verification detail, not user-facing data."""
+        client = TestClient(app)
+        token = client.post("/pair/tokens").json()["token"]
+        sk = SigningKey.generate()
+        client.post(
+            "/pair",
+            json={
+                "token": token,
+                "device_pubkey_b64": self._b64(bytes(sk.verify_key)),
+                "device_name": "iPad",
+            },
+        )
+        r = client.get("/devices/paired")
+        body = r.json()
+        for dev in body["devices"]:
+            assert "pubkey_b64" not in dev
+            assert "pubkey" not in dev
+
+    def test_response_shape(self, app) -> None:
+        client = TestClient(app)
+        token = client.post("/pair/tokens").json()["token"]
+        sk = SigningKey.generate()
+        client.post(
+            "/pair",
+            json={
+                "token": token,
+                "device_pubkey_b64": self._b64(bytes(sk.verify_key)),
+                "device_name": "device-name-X",
+            },
+        )
+        r = client.get("/devices/paired")
+        dev = r.json()["devices"][0]
+        assert set(dev.keys()) == {
+            "device_id", "name", "paired_at", "last_seen"
+        }
+        assert dev["device_id"].startswith("dev-")
+        assert dev["name"] == "device-name-X"
+        assert dev["last_seen"] is None  # never seen until a signed call
