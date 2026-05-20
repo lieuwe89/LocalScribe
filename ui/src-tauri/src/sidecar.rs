@@ -4,9 +4,18 @@ use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::fmt::Write as _;
 
 #[derive(Default)]
 pub struct SidecarUrl(pub Mutex<Option<String>>);
+
+pub struct SidecarToken(pub Mutex<String>);
+
+impl Default for SidecarToken {
+    fn default() -> Self {
+        Self(Mutex::new(String::new()))
+    }
+}
 
 pub struct SidecarChild(pub Mutex<Option<CommandChild>>);
 
@@ -16,9 +25,33 @@ impl Default for SidecarChild {
     }
 }
 
+#[derive(serde::Serialize, Clone)]
+pub struct SidecarInfo {
+    pub url: Option<String>,
+    pub token: String,
+}
+
 #[tauri::command]
-pub fn sidecar_url(state: State<SidecarUrl>) -> Option<String> {
-    state.0.lock().unwrap().clone()
+pub fn sidecar_url(
+    url_state: State<SidecarUrl>,
+    token_state: State<SidecarToken>,
+) -> SidecarInfo {
+    SidecarInfo {
+        url: url_state.0.lock().unwrap().clone(),
+        token: token_state.0.lock().unwrap().clone(),
+    }
+}
+
+fn generate_token() -> String {
+    // 32 bytes of OS randomness → 64 hex chars. Enough entropy that a local
+    // attacker cannot brute-force the token during the app lifetime.
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes).expect("getrandom failed");
+    let mut s = String::with_capacity(64);
+    for b in bytes.iter() {
+        write!(s, "{:02x}", b).unwrap();
+    }
+    s
 }
 
 fn locate_bundled_models(app: &AppHandle) -> Option<PathBuf> {
@@ -43,7 +76,20 @@ fn locate_bundled_models(app: &AppHandle) -> Option<PathBuf> {
 }
 
 pub fn spawn(app: &AppHandle) -> Result<(), String> {
+    // Generate the bearer token first and stash it in state, so the frontend
+    // already sees a valid token by the time it polls sidecar_url. The same
+    // string goes to the sidecar via LOCALLEXIS_API_TOKEN; the sidecar's
+    // FastAPI middleware enforces Authorization: Bearer <token> on every
+    // request when that env var is set.
+    let token = generate_token();
+    {
+        let token_state: State<SidecarToken> = app.state();
+        *token_state.0.lock().unwrap() = token.clone();
+    }
+
     let mut env: HashMap<String, String> = HashMap::new();
+    env.insert("LOCALLEXIS_API_TOKEN".to_string(), token);
+
     if let Some(models_dir) = locate_bundled_models(app) {
         eprintln!("[locallexis] bundled models: {}", models_dir.display());
         env.insert(

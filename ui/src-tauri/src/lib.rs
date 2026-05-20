@@ -11,6 +11,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(sidecar::SidecarUrl::default())
+        .manage(sidecar::SidecarToken::default())
         .manage(sidecar::SidecarChild::default())
         .invoke_handler(tauri::generate_handler![sidecar::sidecar_url])
         .setup(|app| {

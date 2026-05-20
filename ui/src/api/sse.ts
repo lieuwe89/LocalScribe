@@ -1,9 +1,13 @@
-import { baseUrl } from './client';
+import { sidecarInfo } from './client';
 import type { SseEvent } from './types';
 
 export async function subscribeJob(jobId: string, onEvent: (e: SseEvent) => void, signal?: AbortSignal): Promise<void> {
-  const url = (await baseUrl()) + `/jobs/${jobId}/stream`;
-  const resp = await fetch(url, { signal });
+  const info = await sidecarInfo();
+  const url = info.url + `/jobs/${jobId}/stream`;
+  const resp = await fetch(url, {
+    signal,
+    headers: { Authorization: `Bearer ${info.token}` },
+  });
   if (!resp.ok || !resp.body) throw new Error(`SSE ${resp.status}`);
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
