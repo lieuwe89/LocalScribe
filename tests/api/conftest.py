@@ -3,24 +3,33 @@ import pytest_asyncio  # noqa: F401  # ensure plugin loads
 
 
 @pytest.fixture(autouse=True)
-def _isolated_library_db(tmp_path_factory, monkeypatch):
-    """Point every create_app() in api tests at a throw-away SQLite DB so
-    the suite doesn't trample the developer's real ~/Library/.../library.db
-    and tests can't leak state across each other.
+def _isolated_app_data(tmp_path_factory, monkeypatch):
+    """Redirect app-data lookups so tests don't trample the developer's
+    real ~/Library/.../locallexis dir and tests can't leak state.
+
+    Covers both the LibraryDB SQLite path and the workspace identity
+    file used by speechtotext.api.workspace.
 
     Implementation note: monkeypatch.setattr by string path is brittle
     across tests that wipe sys.modules (e.g. test_sidecar_cold_start),
     because Python's import system does not re-bind a child attribute on
     a parent package when the child is already in sys.modules. Resolving
-    the module via `import ... as` and monkeypatching the live object
+    the module via ``import ... as`` and monkeypatching the live object
     directly side-steps the broken parent attribute walk.
     """
     import speechtotext.api.library_db as _library_db
-    db_dir = tmp_path_factory.mktemp("libdb")
+    import speechtotext.api.workspace as _workspace
+
+    data_dir = tmp_path_factory.mktemp("appdata")
     monkeypatch.setattr(
-        _library_db, "default_db_path",
-        lambda: db_dir / "library.db",
+        _library_db, "default_app_data_dir", lambda: data_dir
     )
+    monkeypatch.setattr(
+        _library_db, "default_db_path", lambda: data_dir / "library.db"
+    )
+    # workspace.py imports default_app_data_dir at module load, so we
+    # patch the workspace module's local binding too.
+    monkeypatch.setattr(_workspace, "default_app_data_dir", lambda: data_dir)
 
 
 def pytest_collection_modifyitems(config, items):

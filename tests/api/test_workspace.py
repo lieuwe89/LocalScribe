@@ -89,6 +89,32 @@ class TestCorruption:
         assert did.startswith("hub-")
 
 
+class TestLamport:
+    def test_initial_lamport_is_zero(self, config_dir: Path) -> None:
+        assert workspace.get_lamport(config_dir) == 0
+
+    def test_bump_advances(self, config_dir: Path) -> None:
+        result = workspace.bump_lamport_to(5, config_dir)
+        assert result == 5
+        assert workspace.get_lamport(config_dir) == 5
+
+    def test_bump_never_goes_backward(self, config_dir: Path) -> None:
+        workspace.bump_lamport_to(10, config_dir)
+        result = workspace.bump_lamport_to(3, config_dir)
+        assert result == 10
+        assert workspace.get_lamport(config_dir) == 10
+
+    def test_lamport_persists_alongside_ids(self, config_dir: Path) -> None:
+        workspace.get_workspace_id(config_dir)
+        workspace.bump_lamport_to(42, config_dir)
+        data = json.loads(
+            (config_dir / "workspace.json").read_text(encoding="utf-8")
+        )
+        assert "workspace_id" in data
+        assert "device_id" in data
+        assert data["lamport_counter"] == 42
+
+
 class TestPath:
     def test_default_path_uses_app_data_dir(self) -> None:
         # Spot-check: default path lives under the platform app-data dir

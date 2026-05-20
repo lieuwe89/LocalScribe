@@ -97,3 +97,41 @@ def get_workspace_id(config_dir: Path | None = None) -> str:
 def get_device_id(config_dir: Path | None = None) -> str:
     """Return the persistent hub device_id, generating on first call."""
     return _ensure(config_dir)["device_id"]
+
+
+# ── Lamport counter ────────────────────────────────────────────────────────
+#
+# The hub maintains a workspace-scoped Lamport counter. Every applied PATCH
+# op advances it. It is persisted alongside workspace_id / device_id so a
+# hub restart preserves the global ordering across the fleet.
+#
+# Persistence is "write on every advance" — fine at the PATCH rate this
+# product sees (sparse human edits, not high-frequency machine writes).
+# An in-memory cache layered on top is a future optimisation, not v1.
+
+
+def get_lamport(config_dir: Path | None = None) -> int:
+    """Return the current hub Lamport counter (0 on first call)."""
+    data = _ensure(config_dir)
+    try:
+        return int(data.get("lamport_counter", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def bump_lamport_to(new_value: int, config_dir: Path | None = None) -> int:
+    """Advance the persisted Lamport counter to ``new_value``.
+
+    No-op when ``new_value`` <= current counter (Lamport must only ever
+    move forward). Returns the resulting counter value.
+    """
+    data = _ensure(config_dir)
+    try:
+        current = int(data.get("lamport_counter", 0))
+    except (TypeError, ValueError):
+        current = 0
+    if new_value > current:
+        data["lamport_counter"] = new_value
+        _save(data, config_dir)
+        return new_value
+    return current
