@@ -1,0 +1,42 @@
+# Headless LocalLexis hub image.
+#
+# Builds a small Python runtime with the speechtotext package + its API
+# extras. The transcription pipeline (faster-whisper, pyannote, torch) is
+# *not* installed here on purpose — the headless hub is for environments
+# where transcription happens elsewhere (a separate Docker compose service,
+# a desktop with the Tauri app, etc.). When a future image adds ML deps,
+# split into Dockerfile.hub.cpu / Dockerfile.hub.cuda for clarity.
+#
+# Usage:
+#   docker build -f packaging/Dockerfile.hub -t locallexis-hub:dev .
+#   docker run --rm -p 8765:8765 -v locallexis_data:/root/.local/share/locallexis \
+#       -e LOCALLEXIS_PORT=8765 locallexis-hub:dev
+#
+# The mounted volume preserves workspace.json (workspace identity) across
+# container recreations.
+
+FROM python:3.12-slim AS base
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install the package first (deps cache layer), then copy source.
+COPY pyproject.toml ./
+COPY speechtotext ./speechtotext
+RUN pip install --no-cache-dir -e ".[api]"
+
+ENV LOCALLEXIS_HOST=0.0.0.0 \
+    LOCALLEXIS_PORT=8765
+
+EXPOSE 8765
+
+# /health is served unauthenticated; safe for container healthcheck.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${LOCALLEXIS_PORT}/health" || exit 1
+
+CMD ["locallexis-hub"]

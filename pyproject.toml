@@ -42,6 +42,7 @@ packaging = [
 
 [project.scripts]
 stt = "speechtotext.cli:app"
+locallexis-hub = "speechtotext.api.server:headless"
 
 [tool.setuptools.packages.find]
 include = ["speechtotext*"]

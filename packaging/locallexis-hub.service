@@ -1,0 +1,38 @@
+# systemd unit for the headless LocalLexis hub.
+#
+# Install:
+#   sudo cp packaging/locallexis-hub.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now locallexis-hub
+#
+# Adjust User, WorkingDirectory, and the venv path to match the host
+# you're running on. The service expects the speechtotext package
+# installed into the referenced venv with the [api] extra:
+#   /opt/locallexis/.venv/bin/pip install -e /opt/locallexis/SpeechToText[api]
+
+[Unit]
+Description=LocalLexis hub (headless)
+Documentation=https://github.com/lieuwe89/LocalLexis
+After=network.target
+
+[Service]
+Type=exec
+User=locallexis
+Group=locallexis
+WorkingDirectory=/opt/locallexis
+Environment="LOCALLEXIS_HOST=0.0.0.0"
+Environment="LOCALLEXIS_PORT=8765"
+ExecStart=/opt/locallexis/.venv/bin/locallexis-hub
+Restart=on-failure
+RestartSec=5
+# Confine the process: it only needs read of code + write of its data
+# dir (the user's HOME by default; LOCALLEXIS_DATA_DIR will land in a
+# future commit).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/var/lib/locallexis
+
+[Install]
+WantedBy=multi-user.target
