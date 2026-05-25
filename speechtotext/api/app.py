@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import os
+import re
 import threading
 from pathlib import Path
 
@@ -28,6 +29,32 @@ from speechtotext.api.watcher import WatchController
 from speechtotext.config import load_config
 
 
+# Routes that authenticate via the LAN-device flow rather than the
+# Tauri-launcher bearer token. BearerAuthMiddleware lets these through
+# so paired phones / tablets (which never see LOCALLEXIS_API_TOKEN) can
+# reach the multi-device sync surface. The route handlers themselves
+# enforce auth: ``POST /pair`` validates the single-use token in the
+# body; ``/sync/*`` and ``PATCH /transcripts/{tid}`` validate an
+# Ed25519 signature via :func:`speechtotext.api.auth.verify_device_signature`.
+#
+# Anything not matched here stays bearer-gated, so admin endpoints
+# (/pair/tokens, /config, /jobs, PATCH /transcripts/{tid}/relabel,
+# GET /transcripts, etc.) cannot be reached from the LAN.
+_SIGNED_TRANSCRIPT_PATCH = re.compile(r"^/transcripts/[^/]+$")
+
+
+def _is_lan_signed_route(path: str, method: str) -> bool:
+    if path == "/pair" and method == "POST":
+        return True
+    if method == "GET" and (
+        path == "/sync/snapshot" or path.startswith("/sync/since/")
+    ):
+        return True
+    if method == "PATCH" and _SIGNED_TRANSCRIPT_PATCH.fullmatch(path):
+        return True
+    return False
+
+
 class BearerAuthMiddleware:
     """Reject requests without a matching bearer token when one is required.
 
@@ -36,6 +63,10 @@ class BearerAuthMiddleware:
     env var is unset (e.g. running `stt serve` from the CLI) we skip auth so
     standalone use is still possible. Preflight (OPTIONS) is always passed
     through so CORS can answer with the right headers.
+
+    LAN-device routes (see :func:`_is_lan_signed_route`) bypass the bearer
+    check because they authenticate via signed requests instead. The route's
+    own dep rejects anything missing or forged.
 
     Implemented as raw ASGI middleware (not BaseHTTPMiddleware) to avoid
     buffering streaming responses such as SSE.
@@ -49,7 +80,12 @@ class BearerAuthMiddleware:
             await self.app(scope, receive, send)
             return
         expected = os.environ.get("LOCALLEXIS_API_TOKEN")
-        if not expected or scope.get("method") == "OPTIONS":
+        method = scope.get("method", "")
+        path = scope.get("path", "")
+        if not expected or method == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
+        if _is_lan_signed_route(path, method):
             await self.app(scope, receive, send)
             return
         auth = ""
