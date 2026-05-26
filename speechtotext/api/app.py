@@ -123,6 +123,11 @@ def create_app(
     app.state.library_db = LibraryDB(library_db_path)
     app.state.pairing_tokens = PairingTokenStore()
     app.state.device_registry = DeviceRegistry(devices_db_path)
+    # Per-transcript write lock for PATCH /transcripts/{tid}. Two paired
+    # devices PATCHing the same transcript would otherwise race on the
+    # read-merge-write sequence and one would clobber the other.
+    app.state.transcript_locks: dict[str, threading.Lock] = {}
+    app.state.transcript_locks_dict_lock = threading.Lock()
 
     try:
         _cfg = load_config()

@@ -260,6 +260,72 @@ class TestPatchTranscriptOp:
         raw = json.loads((tmp_path / "meet.json").read_text())
         assert raw["_clocks"]["speakers.SPEAKER_00"]["device"] == dev_id
 
+    def test_concurrent_patches_dont_clobber(
+        self, app_with_lib, tmp_path, monkeypatch
+    ):
+        """Two PATCHes on the same transcript must both land in history.
+
+        Without a per-transcript lock the read-modify-write sequence
+        races: both requests read the same on-disk state, merge, then
+        the second write clobbers the first. The lock serialises them.
+        """
+        import threading
+        import time
+        from concurrent.futures import ThreadPoolExecutor
+
+        import speechtotext.api.routes_transcripts as routes_t
+
+        # Slow down the write phase so the two requests' reads
+        # interleave (without delay the OS would likely serialise
+        # them). With the lock the second request waits at the lock
+        # and re-reads after the first writes. Without the lock both
+        # see the same state and the second clobbers.
+        real_dumps = routes_t.json.dumps
+
+        def slow_dumps(*args, **kwargs):
+            time.sleep(0.05)
+            return real_dumps(*args, **kwargs)
+
+        monkeypatch.setattr(routes_t.json, "dumps", slow_dumps)
+
+        client = TestClient(app_with_lib)
+        sk, dev_id = _pair_device(client)
+
+        def do_patch(value: str):
+            return _signed_patch(
+                client,
+                sk,
+                dev_id,
+                "/transcripts/meet",
+                {
+                    "op": "relabel",
+                    "key": "speakers.SPEAKER_00",
+                    "value": value,
+                    "lamport_observed": 0,
+                },
+            )
+
+        ready = threading.Event()
+
+        def run(value: str):
+            ready.wait(timeout=2.0)
+            return do_patch(value)
+
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            f1 = ex.submit(run, "Bob")
+            f2 = ex.submit(run, "Carol")
+            ready.set()
+            r1 = f1.result(timeout=10)
+            r2 = f2.result(timeout=10)
+
+        assert r1.status_code == 200, r1.text
+        assert r2.status_code == 200, r2.text
+
+        raw = json.loads((tmp_path / "meet.json").read_text())
+        assert len(raw["_history"]) == 2, (
+            f"expected both ops in history, lock missing? got {raw['_history']}"
+        )
+
 
 # ── PATCH auth (block 5c) ──────────────────────────────────────────────────
 

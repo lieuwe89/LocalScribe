@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,20 @@ def _atomic_write_json(path: Path, doc: dict) -> None:
     os.replace(tmp, path)
 
 
+def _get_transcript_lock(state, tid: str) -> threading.Lock:
+    """Return the per-transcript write lock, creating it on first use.
+
+    A small dict-level lock guards the lazy creation so two concurrent
+    requests for the same transcript get the same lock object.
+    """
+    with state.transcript_locks_dict_lock:
+        lock = state.transcript_locks.get(tid)
+        if lock is None:
+            lock = threading.Lock()
+            state.transcript_locks[tid] = lock
+        return lock
+
+
 @router.get("/transcripts")
 def list_transcripts(
     request: Request,
@@ -136,40 +151,47 @@ def patch_transcript_op(
     p = db.get_path(tid) or find_sidecar(request.app.state.library_dirs, tid)
     if p is None or not p.exists():
         raise HTTPException(status_code=404, detail=f"transcript not found: {tid}")
-    try:
-        doc = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(
-            status_code=500, detail=f"failed to read transcript: {exc}"
+
+    # Serialise read-modify-write so two paired devices PATCHing the
+    # same transcript can't both read the same on-disk state and have
+    # the second writer clobber the first. The lock is per-tid so
+    # different transcripts still PATCH in parallel.
+    lock = _get_transcript_lock(request.app.state, tid)
+    with lock:
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=500, detail=f"failed to read transcript: {exc}"
+            )
+
+        state = TranscriptState.from_json(doc)
+        op_request = OpRequest(
+            op=body.op,
+            key=body.key,
+            value=body.value,
+            device=device_id,
+            lamport_observed=body.lamport_observed,
         )
+        try:
+            new_state, new_lamport, applied_op = merge_op(
+                state, op_request, get_lamport()
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
-    state = TranscriptState.from_json(doc)
-    op_request = OpRequest(
-        op=body.op,
-        key=body.key,
-        value=body.value,
-        device=device_id,
-        lamport_observed=body.lamport_observed,
-    )
-    try:
-        new_state, new_lamport, applied_op = merge_op(
-            state, op_request, get_lamport()
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        # Persist new counter before writing the file so a crash between
+        # write and counter-update is recoverable from the transcript log.
+        bump_lamport_to(new_lamport)
 
-    # Persist new counter before writing the file so a crash between
-    # write and counter-update is recoverable from the transcript log.
-    bump_lamport_to(new_lamport)
-
-    # Merge CRDT state back into the full doc and write atomically.
-    # Stamp workspace_id if the transcript pre-dates the v2 schema.
-    if not doc.get("_workspace_id"):
-        doc["_workspace_id"] = get_workspace_id()
-    doc["speakers"] = dict(new_state.speakers)
-    doc["_clocks"] = {k: asdict(c) for k, c in new_state.clocks.items()}
-    doc["_history"] = [asdict(op) for op in new_state.history]
-    _atomic_write_json(p, doc)
+        # Merge CRDT state back into the full doc and write atomically.
+        # Stamp workspace_id if the transcript pre-dates the v2 schema.
+        if not doc.get("_workspace_id"):
+            doc["_workspace_id"] = get_workspace_id()
+        doc["speakers"] = dict(new_state.speakers)
+        doc["_clocks"] = {k: asdict(c) for k, c in new_state.clocks.items()}
+        doc["_history"] = [asdict(op) for op in new_state.history]
+        _atomic_write_json(p, doc)
 
     # speaker_labels participate in FTS, so reindex.
     db.upsert_path(p)
