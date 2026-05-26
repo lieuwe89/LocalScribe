@@ -12,7 +12,7 @@ describe('useBackend', () => {
     useBackend.getState()._resetForTests();
     useBackend.setState({ status: 'starting', elapsedMs: 0, error: null });
     vi.useFakeTimers();
-    global.fetch = vi.fn();
+    globalThis.fetch = vi.fn();
   });
 
   afterEach(() => {
