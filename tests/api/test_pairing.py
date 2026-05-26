@@ -75,6 +75,68 @@ class TestPairingTokenStore:
         # Fresh token survives.
         assert store.consume(fresh.token).token == fresh.token
 
+    def test_purge_drops_consumed_entries_after_2x_ttl(self) -> None:
+        """_consumed must not grow forever — entries past replay window
+        get forgotten so long-running hubs stay bounded."""
+        store = PairingTokenStore()
+        tok = store.mint()
+        store.consume(tok.token)
+        assert tok.token in store._consumed
+        # Replay window = 2 * TTL. Past that, the token cannot legitimately
+        # be re-submitted (it would already fail the TTL check), so we
+        # can drop it from the consumed set.
+        future = tok.created_at + 2 * TOKEN_TTL_SECONDS + 1
+        store.purge_expired(now=future)
+        assert tok.token not in store._consumed
+
+    def test_consumed_token_still_rejected_within_replay_window(self) -> None:
+        """Defensive check: consumed tokens stay flagged through 2*TTL."""
+        store = PairingTokenStore()
+        tok = store.mint()
+        store.consume(tok.token)
+        # 1.5 TTL later — purge should not have dropped this entry yet.
+        future = tok.created_at + TOKEN_TTL_SECONDS + 1
+        store.purge_expired(now=future)
+        with pytest.raises(ValueError, match="consumed"):
+            store.consume(tok.token, now=future)
+
+    def test_mint_opportunistically_purges_stale_state(self) -> None:
+        """Each mint sweeps the store so no background timer is needed."""
+        store = PairingTokenStore()
+        old = store.mint()
+        # Backdate the old token so it's well past 2*TTL.
+        store._tokens[old.token] = type(old)(
+            token=old.token,
+            created_at=old.created_at - 3 * TOKEN_TTL_SECONDS,
+        )
+        assert old.token in store._tokens
+        # A fresh mint should sweep the backdated entry away.
+        store.mint()
+        assert old.token not in store._tokens
+
+    def test_consumed_set_stays_bounded_across_many_mints(self) -> None:
+        """100 mint+consume cycles followed by a clock-jump shouldn't
+        leave 100 entries in _consumed."""
+        store = PairingTokenStore()
+        anchor = time.time()
+        # Mint and consume 50 tokens at t0.
+        first_tokens = []
+        for _ in range(50):
+            t = store.mint()
+            store.consume(t.token)
+            first_tokens.append(t.token)
+        assert len(store._consumed) == 50
+        # Jump clock past 2*TTL relative to those tokens and mint again
+        # so purge runs.
+        future = anchor + 2 * TOKEN_TTL_SECONDS + 1
+        # Backdate the consumed timestamps to anchor.
+        store._consumed = {t: anchor for t in store._consumed}
+        # Mint with the future clock so purge sees them as stale.
+        # We have to drive purge_expired explicitly here because mint()
+        # uses time.time() and we can't easily monkeypatch from inside.
+        store.purge_expired(now=future)
+        assert len(store._consumed) == 0
+
 
 def test_new_device_id_format() -> None:
     did = new_device_id()

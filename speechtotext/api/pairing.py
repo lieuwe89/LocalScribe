@@ -52,10 +52,17 @@ class PairingTokenStore:
 
     def __init__(self) -> None:
         self._tokens: dict[str, PairingToken] = {}
-        self._consumed: set[str] = set()
+        # token -> wall-clock seconds when it was consumed. Stored as a
+        # dict (not a set) so purge_expired can drop entries past the
+        # replay window and keep memory bounded on long-running hubs.
+        self._consumed: dict[str, float] = {}
         self._lock = threading.Lock()
 
     def mint(self) -> PairingToken:
+        # Opportunistic sweep on every mint keeps the store bounded
+        # without needing a background timer. Pairing is sparse enough
+        # (one-off device add) that the overhead is negligible.
+        self.purge_expired()
         token_str = secrets.token_hex(16)  # 16 bytes -> 32 hex chars
         tok = PairingToken(token=token_str, created_at=time.time())
         with self._lock:
@@ -77,26 +84,38 @@ class PairingTokenStore:
             tok = self._tokens.get(token_str)
             if tok is None:
                 raise ValueError("unknown: token not recognised")
-            if tok.is_expired(now=now):
+            stamp = now if now is not None else time.time()
+            if tok.is_expired(now=stamp):
                 # Move from active to consumed so a stale token cannot
                 # be replayed if the wall clock jitters back.
-                self._consumed.add(token_str)
+                self._consumed[token_str] = stamp
                 del self._tokens[token_str]
                 raise ValueError("expired: token past 5-minute TTL")
-            self._consumed.add(token_str)
+            self._consumed[token_str] = stamp
             del self._tokens[token_str]
             return tok
 
     def purge_expired(self, *, now: float | None = None) -> int:
-        """Drop expired tokens from active storage; return count purged."""
-        now = now or time.time()
+        """Drop expired tokens; return count of active tokens dropped.
+
+        Also drops ``_consumed`` entries older than ``2 * TOKEN_TTL_SECONDS``
+        — past that window any replay would already be rejected as
+        expired anyway, so retaining the consumed flag adds nothing.
+        """
+        now = now if now is not None else time.time()
+        replay_cutoff = now - 2 * TOKEN_TTL_SECONDS
         with self._lock:
             expired = [
                 t for t, tok in self._tokens.items() if tok.is_expired(now=now)
             ]
             for t in expired:
-                self._consumed.add(t)
+                self._consumed[t] = now
                 del self._tokens[t]
+            stale_consumed = [
+                t for t, ts in self._consumed.items() if ts < replay_cutoff
+            ]
+            for t in stale_consumed:
+                del self._consumed[t]
             return len(expired)
 
 
