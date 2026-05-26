@@ -35,6 +35,7 @@ class TestGetOrCreateTls:
         assert key1 == key2
         assert cert_bytes_1 == cert_bytes_2
 
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits not enforced on Windows")
     def test_key_mode_is_0600(self, config_dir: Path) -> None:
         _, key = tls.get_or_create_tls(config_dir)
         mode = stat.S_IMODE(os.stat(key).st_mode)

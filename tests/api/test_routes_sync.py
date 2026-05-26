@@ -98,7 +98,7 @@ class TestSyncSnapshot:
         sk, dev_id = _pair(client)
         r = _signed_get(client, sk, dev_id, "/sync/snapshot")
         body = r.json()
-        ids = sorted(d["audio_path"].split("/")[-1] for d in body["transcripts"])
+        ids = sorted(Path(d["audio_path"]).name for d in body["transcripts"])
         assert ids == ["a.mp3", "b.mp3", "c.mp3"]
         assert body["cursor"] > 0
 
@@ -129,7 +129,7 @@ class TestSyncSince:
         # /sync/since with the snapshot cursor should return only "new".
         r = _signed_get(client, sk, dev_id, f"/sync/since/{cursor}")
         body = r.json()
-        names = [d["audio_path"].split("/")[-1] for d in body["transcripts"]]
+        names = [Path(d["audio_path"]).name for d in body["transcripts"]]
         assert names == ["new.mp3"]
         assert body["cursor"] > cursor
 
@@ -156,10 +156,10 @@ class TestSyncSince:
         # Both return the same docs (order independent — compare as sets
         # via id field stand-in: the audio_path basename).
         snap_names = {
-            d["audio_path"].split("/")[-1] for d in snap["transcripts"]
+            Path(d["audio_path"]).name for d in snap["transcripts"]
         }
         since_names = {
-            d["audio_path"].split("/")[-1] for d in since_zero["transcripts"]
+            Path(d["audio_path"]).name for d in since_zero["transcripts"]
         }
         assert snap_names == since_names
 

@@ -33,6 +33,7 @@ class TestGetWorkspaceKey:
         b = tmp_path / "b"
         assert secrets_store.get_workspace_key(a) != secrets_store.get_workspace_key(b)
 
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits not enforced on Windows")
     def test_file_mode_is_0600(self, config_dir: Path) -> None:
         secrets_store.get_workspace_key(config_dir)
         path = config_dir / "secrets.bin"

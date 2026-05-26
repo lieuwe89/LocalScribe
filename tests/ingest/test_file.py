@@ -18,7 +18,7 @@ def test_runs_ffmpeg_with_correct_args(tmp_path: Path):
         normalize_to_wav(src, out)
 
     args = run.call_args.args[0]
-    assert args[0].endswith("ffmpeg") or args[0].endswith("ffmpeg.exe")
+    assert args[0].lower().endswith(("ffmpeg", "ffmpeg.exe"))
     assert "-ac" in args and "1" in args
     assert "-ar" in args and "16000" in args
     assert str(src) in args
