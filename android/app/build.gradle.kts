@@ -80,6 +80,9 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.core)
 
+    implementation(libs.lazysodium.android)
+    implementation(libs.androidx.security.crypto)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)
@@ -88,4 +91,5 @@ dependencies {
     testImplementation(libs.androidx.test.core.ktx)
     testImplementation(libs.androidx.test.ext.junit.ktx)
     testImplementation(libs.robolectric)
+    testImplementation(libs.lazysodium.java)
 }

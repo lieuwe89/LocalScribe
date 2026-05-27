@@ -13,6 +13,9 @@ junit = "4.13.2"
 androidxTest = "1.6.1"
 androidxTestExt = "1.2.1"
 robolectric = "4.13"
+lazysodiumAndroid = "5.1.0"
+lazysodiumJava = "5.1.4"
+securityCrypto = "1.1.0-alpha06"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -40,6 +43,10 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-core-ktx = { group = "androidx.test", name = "core-ktx", version.ref = "androidxTest" }
 androidx-test-ext-junit-ktx = { group = "androidx.test.ext", name = "junit-ktx", version.ref = "androidxTestExt" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+
+lazysodium-android = { group = "com.goterl", name = "lazysodium-android", version.ref = "lazysodiumAndroid" }
+lazysodium-java = { group = "com.goterl", name = "lazysodium-java", version.ref = "lazysodiumJava" }
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
