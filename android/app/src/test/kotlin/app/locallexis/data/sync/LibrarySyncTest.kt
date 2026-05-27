@@ -44,7 +44,7 @@ class LibrarySyncTest {
             .addInterceptor(SignedRequestInterceptor(crypto, identity))
             .build()
         val client = SyncClient(http, server.url("/").toString().trimEnd('/'))
-        libsync = LibrarySync(client, SyncIngest(db))
+        libsync = DefaultLibrarySync(client, SyncIngest(db))
     }
 
     @After
