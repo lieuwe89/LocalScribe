@@ -71,7 +71,7 @@ fun MainScreen() {
             startDestination = "library",
             modifier = Modifier.padding(padding),
         ) {
-            composable("library") { LibraryScreen() }
+            composable("library") { LibraryScreen(onOpen = { id -> nav.navigate("transcript/$id") }) }
             composable("recording") { RecordingScreen() }
             composable("pairing") { PairingScreen() }
             composable("settings") { SettingsScreen() }
