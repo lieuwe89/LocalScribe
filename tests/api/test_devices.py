@@ -53,6 +53,35 @@ class TestLastSeen:
         # Should not raise — silently no-op on missing row.
         registry.update_last_seen("dev-never")
 
+    def test_update_last_seen_throttled_within_window(
+        self, registry: DeviceRegistry
+    ) -> None:
+        # A signed request from a frequently-polling device must not turn
+        # a read endpoint into a SQLite write on every call. The first
+        # update writes; a second within the throttle window is skipped.
+        registry.register("dev-aaa", "pk", "test")
+        registry.update_last_seen("dev-aaa")
+        first = registry.get("dev-aaa")["last_seen"]
+        assert first is not None
+        registry.update_last_seen("dev-aaa")
+        assert registry.get("dev-aaa")["last_seen"] == first
+
+    def test_update_last_seen_writes_after_interval(
+        self, registry: DeviceRegistry, monkeypatch
+    ) -> None:
+        import time
+
+        import speechtotext.api.devices as devices_mod
+
+        registry.register("dev-aaa", "pk", "test")
+        registry.update_last_seen("dev-aaa")
+        first = registry.get("dev-aaa")["last_seen"]
+        # Collapse the throttle window so the next call writes again.
+        monkeypatch.setattr(devices_mod, "LAST_SEEN_MIN_INTERVAL_S", 0.0)
+        time.sleep(0.01)
+        registry.update_last_seen("dev-aaa")
+        assert registry.get("dev-aaa")["last_seen"] != first
+
 
 class TestList:
     def test_list_orders_by_paired_at_desc(

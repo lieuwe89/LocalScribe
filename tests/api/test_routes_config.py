@@ -101,3 +101,44 @@ def test_config_patch_writes_atomically(client):
     assert r.status_code == 200
     siblings = list(cfg_path.parent.iterdir())
     assert siblings == [cfg_path]
+
+
+def test_concurrent_config_patches_dont_lose_updates(client, monkeypatch):
+    # Two clients PATCHing different keys at once must not clobber each
+    # other. Without a write lock both read the same on-disk state, each
+    # writes only its own key, and the second write wins — losing the
+    # first key. A slow serializer widens the race so the test is reliable.
+    import threading
+    import time
+    import tomllib
+    from concurrent.futures import ThreadPoolExecutor
+
+    import speechtotext.api.routes_config as rc
+
+    c, cfg_path = client
+    real_dump = rc._dump_toml
+
+    def slow_dump(d):
+        time.sleep(0.05)
+        return real_dump(d)
+
+    monkeypatch.setattr(rc, "_dump_toml", slow_dump)
+
+    ready = threading.Event()
+
+    def run(body):
+        ready.wait(timeout=2.0)
+        return c.patch("/config", json=body)
+
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f1 = ex.submit(run, {"asr_model": "modelA"})
+        f2 = ex.submit(run, {"backend": "cpu"})
+        ready.set()
+        r1 = f1.result(timeout=10)
+        r2 = f2.result(timeout=10)
+
+    assert r1.status_code == 200, r1.text
+    assert r2.status_code == 200, r2.text
+    raw = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+    assert raw.get("asr_model") == "modelA", raw
+    assert raw.get("backend") == "cpu", raw

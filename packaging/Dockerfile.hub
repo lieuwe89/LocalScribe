@@ -10,10 +10,14 @@
 # Usage:
 #   docker build -f packaging/Dockerfile.hub -t locallexis-hub:dev .
 #   docker run --rm -p 8765:8765 -v locallexis_data:/root/.local/share/locallexis \
-#       -e LOCALLEXIS_PORT=8765 locallexis-hub:dev
+#       -e LOCALLEXIS_API_TOKEN="$(openssl rand -hex 32)" locallexis-hub:dev
 #
-# The mounted volume preserves workspace.json (workspace identity) across
-# container recreations.
+# An admin token is REQUIRED. The hub binds 0.0.0.0 and refuses to start
+# without LOCALLEXIS_API_TOKEN — otherwise the admin API (config, transcripts,
+# pairing-token minting, job control) would be reachable on the network with
+# no authentication. Set LOCALLEXIS_ALLOW_ANONYMOUS=1 to override on a trusted,
+# isolated network. The mounted volume preserves workspace.json (workspace
+# identity) and secrets.bin (workspace key) across container recreations.
 
 FROM python:3.12-slim AS base
 

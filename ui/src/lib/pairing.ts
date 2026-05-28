@@ -26,13 +26,19 @@ export interface PairingPayloadV1 {
  * hub port the UI already knows. Throws if the host has no usable LAN
  * address (offline / loopback-only), since a localhost URL is useless to a
  * phone.
+ *
+ * ``address`` selects which LAN interface to advertise; it defaults to the
+ * first discovered address. A host with several interfaces (Ethernet, Wi-Fi,
+ * VPN, docker0) may list a virtual/unreachable address first, so the UI lets
+ * the user choose and passes the choice here.
  */
 export function buildPairingPayload(
   info: HubInfo,
   token: MintedToken,
   port: number,
+  address?: string,
 ): PairingPayloadV1 {
-  const ip = info.lan_addresses[0];
+  const ip = address ?? info.lan_addresses[0];
   if (!ip) {
     throw new Error(
       'No LAN address found for this machine — connect it to a network and try again.',

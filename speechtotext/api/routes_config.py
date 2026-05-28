@@ -4,6 +4,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 import tomllib
 from pathlib import Path
 from typing import Any, Literal
@@ -14,6 +15,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from speechtotext.config import DEFAULT_CONFIG_PATH, load_config
 
 router = APIRouter()
+
+# Serialise the read-modify-write of config.toml. Two concurrent PATCH
+# /config requests would otherwise both read the same state and the second
+# write would silently drop the first request's change.
+_config_write_lock = threading.Lock()
 
 _EXT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 _TOP_KEYS = ("backend", "asr_model", "hf_token", "model_cache_dir", "default_out_dir")
@@ -129,23 +135,24 @@ def get_config() -> dict:
 def patch_config(updates: ConfigPatch) -> dict:
     path: Path = DEFAULT_CONFIG_PATH
 
-    existing: dict[str, Any] = {}
-    if path.exists():
-        existing = tomllib.loads(path.read_text(encoding="utf-8"))
-
     patch = updates.model_dump(exclude_none=True)
 
-    for k in _TOP_KEYS:
-        if k in patch:
-            existing[k] = patch[k]
+    with _config_write_lock:
+        existing: dict[str, Any] = {}
+        if path.exists():
+            existing = tomllib.loads(path.read_text(encoding="utf-8"))
 
-    if "watch" in patch:
-        watch_existing = existing.get("watch")
-        if not isinstance(watch_existing, dict):
-            watch_existing = {}
-        for k, v in patch["watch"].items():
-            watch_existing[k] = v
-        existing["watch"] = watch_existing
+        for k in _TOP_KEYS:
+            if k in patch:
+                existing[k] = patch[k]
 
-    _atomic_write(path, _dump_toml(existing))
-    return _public(load_config(config_path=path))
+        if "watch" in patch:
+            watch_existing = existing.get("watch")
+            if not isinstance(watch_existing, dict):
+                watch_existing = {}
+            for k, v in patch["watch"].items():
+                watch_existing[k] = v
+            existing["watch"] = watch_existing
+
+        _atomic_write(path, _dump_toml(existing))
+        return _public(load_config(config_path=path))

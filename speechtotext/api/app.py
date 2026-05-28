@@ -4,6 +4,7 @@ import hmac
 import os
 import re
 import threading
+import weakref
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -12,10 +13,12 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from speechtotext import __version__
+from speechtotext.api.auth import NonceCache
 from speechtotext.api.devices import DeviceRegistry
 from speechtotext.api.jobs import JobRegistry
 from speechtotext.api.library_db import LibraryDB
 from speechtotext.api.pairing import PairingTokenStore
+from speechtotext.api.reconcile import LibraryReconciler
 from speechtotext.api.routes_config import router as config_router
 from speechtotext.api.routes_devices import router as devices_router
 from speechtotext.api.routes_hub import router as hub_router
@@ -122,12 +125,21 @@ def create_app(
     app.state.watcher = WatchController()
     app.state.library_dirs: set[Path] = set()
     app.state.library_db = LibraryDB(library_db_path)
+    # Gates the library walk behind a per-dir mtime check so list/sync
+    # requests don't stat every transcript file when nothing changed.
+    app.state.library_reconciler = LibraryReconciler(app.state.library_db)
     app.state.pairing_tokens = PairingTokenStore()
     app.state.device_registry = DeviceRegistry(devices_db_path)
+    # Replay defense for device-signed requests (see auth.verify_device_signature).
+    app.state.nonce_cache = NonceCache()
     # Per-transcript write lock for PATCH /transcripts/{tid}. Two paired
     # devices PATCHing the same transcript would otherwise race on the
-    # read-merge-write sequence and one would clobber the other.
-    app.state.transcript_locks: dict[str, threading.Lock] = {}
+    # read-merge-write sequence and one would clobber the other. Held in a
+    # weak-value map so a transcript's lock is GC'd once no request holds
+    # it — otherwise the dict grows one entry per transcript-id forever.
+    app.state.transcript_locks: weakref.WeakValueDictionary[str, threading.Lock] = (
+        weakref.WeakValueDictionary()
+    )
     app.state.transcript_locks_dict_lock = threading.Lock()
 
     try:

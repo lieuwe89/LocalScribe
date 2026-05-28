@@ -68,6 +68,37 @@ def _env_truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", ""}
+
+
+def _is_loopback_host(host: str) -> bool:
+    return host.strip() in _LOOPBACK_HOSTS
+
+
+def _require_admin_token_for_public_bind(host: str) -> None:
+    """Fail closed if exposing the admin API unauthenticated on a public bind.
+
+    When ``LOCALLEXIS_API_TOKEN`` is unset the bearer middleware is disabled
+    (fine for a loopback dev server). On a non-loopback bind that would put
+    ``/config``, ``/transcripts``, ``/pair/tokens`` and job control on the
+    network with no auth, so refuse to start unless the operator explicitly
+    opts into anonymous mode via ``LOCALLEXIS_ALLOW_ANONYMOUS``.
+    """
+    if _is_loopback_host(host):
+        return
+    if os.environ.get("LOCALLEXIS_API_TOKEN"):
+        return
+    if _env_truthy("LOCALLEXIS_ALLOW_ANONYMOUS"):
+        return
+    raise SystemExit(
+        f"refusing to bind {host!r} without LOCALLEXIS_API_TOKEN: the admin "
+        "API (config, transcripts, pairing-token minting, job control) would "
+        "be reachable on the network with no authentication. Set "
+        "LOCALLEXIS_API_TOKEN to a secret value, or set "
+        "LOCALLEXIS_ALLOW_ANONYMOUS=1 to bind anyway."
+    )
+
+
 def _int_env(name: str, default: int | None = None) -> int | None:
     raw = os.environ.get(name)
     if raw is None:
@@ -153,6 +184,7 @@ def headless() -> None:
     is the LAN/server entry.
     """
     host = os.environ.get("LOCALLEXIS_HOST", "0.0.0.0")
+    _require_admin_token_for_public_bind(host)
     port = _int_env("LOCALLEXIS_PORT", 8765)
     loopback_port = _int_env("LOCALLEXIS_LOOPBACK_PORT")
     tls = _env_truthy("LOCALLEXIS_TLS_ENABLED")

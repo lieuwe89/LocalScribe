@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from nacl.signing import SigningKey
 
 from speechtotext.api.app import create_app
+from tests.api._signing import signed_headers
 
 
 def _make_doc(audio_path: Path, speakers: dict[str, str] | None = None) -> dict:
@@ -65,15 +66,7 @@ def _pair(client: TestClient):
 
 
 def _signed_get(client, sk, device_id, path: str):
-    msg = b"GET\n" + path.encode("ascii") + b"\n"  # empty body
-    sig = sk.sign(msg).signature
-    return client.get(
-        path,
-        headers={
-            "X-Device-Id": device_id,
-            "X-Signature-B64": base64.b64encode(sig).decode("ascii"),
-        },
-    )
+    return client.get(path, headers=signed_headers(sk, device_id, "GET", path))
 
 
 # ── Snapshot ──────────────────────────────────────────────────────────────
@@ -192,16 +185,12 @@ class TestSyncSince:
             "lamport_observed": 0,
         }
         body_bytes = json.dumps(body).encode()
-        sig = sk.sign(
-            b"PATCH\n/transcripts/a\n" + body_bytes
-        ).signature
         patch_r = client.patch(
             "/transcripts/a",
             content=body_bytes,
             headers={
                 "Content-Type": "application/json",
-                "X-Device-Id": dev_id,
-                "X-Signature-B64": base64.b64encode(sig).decode("ascii"),
+                **signed_headers(sk, dev_id, "PATCH", "/transcripts/a", body_bytes),
             },
         )
         assert patch_r.status_code == 200, patch_r.text
@@ -220,3 +209,42 @@ class TestSyncSince:
         assert r.status_code == 401
         r = client.get("/sync/since/0")
         assert r.status_code == 401
+
+
+# ── Pagination ──────────────────────────────────────────────────────────────
+
+
+class TestSyncPagination:
+    def test_snapshot_limit_caps_results(self, app, tmp_path):
+        for n in ("a", "b", "c"):
+            _write_transcript(tmp_path, n)
+            time.sleep(0.01)
+        client = TestClient(app)
+        sk, dev = _pair(client)
+        r = _signed_get(client, sk, dev, "/sync/snapshot?limit=2")
+        assert r.status_code == 200, r.text
+        assert len(r.json()["transcripts"]) == 2
+
+    def test_snapshot_offset_pages_through_all(self, app, tmp_path):
+        for n in ("a", "b", "c"):
+            _write_transcript(tmp_path, n)
+            time.sleep(0.01)
+        client = TestClient(app)
+        sk, dev = _pair(client)
+        p1 = _signed_get(client, sk, dev, "/sync/snapshot?limit=2&offset=0").json()
+        p2 = _signed_get(client, sk, dev, "/sync/snapshot?limit=2&offset=2").json()
+        n1 = {Path(d["audio_path"]).name for d in p1["transcripts"]}
+        n2 = {Path(d["audio_path"]).name for d in p2["transcripts"]}
+        assert len(p1["transcripts"]) == 2
+        assert len(p2["transcripts"]) == 1
+        assert n1.isdisjoint(n2)
+        assert n1 | n2 == {"a.mp3", "b.mp3", "c.mp3"}
+
+    def test_since_respects_limit(self, app, tmp_path):
+        for n in ("a", "b", "c"):
+            _write_transcript(tmp_path, n)
+            time.sleep(0.01)
+        client = TestClient(app)
+        sk, dev = _pair(client)
+        r = _signed_get(client, sk, dev, "/sync/since/0?limit=2")
+        assert len(r.json()["transcripts"]) == 2

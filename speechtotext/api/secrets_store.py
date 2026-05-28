@@ -33,6 +33,14 @@ _FILENAME = "secrets.bin"
 _KEY_BYTES = 32
 
 
+class CorruptedSecretError(RuntimeError):
+    """Raised when secrets.bin exists but is unreadable/truncated.
+
+    Distinguishes a corrupt key file (fatal — refuse to overwrite) from a
+    missing one (fine — generate a fresh key).
+    """
+
+
 def secrets_file_path(config_dir: Path | None = None) -> Path:
     """Path of the secrets file. Pass ``config_dir`` in tests to redirect."""
     base = Path(config_dir) if config_dir else default_app_data_dir()
@@ -57,12 +65,12 @@ def _generate_and_write(path: Path) -> bytes:
 def get_workspace_key(config_dir: Path | None = None) -> bytes:
     """Return the 32-byte workspace symmetric key W, generating on first call.
 
-    Subsequent calls return the same key, even across process
-    restarts. If the secrets file exists but is shorter than 32 bytes
-    (truncated or corrupt) the function regenerates — the existing
-    workspace is then effectively unrecoverable, which is the same
-    consequence as a missing file and is documented in the recovery
-    flow.
+    Subsequent calls return the same key, even across process restarts.
+    If the secrets file exists but is shorter than 32 bytes (truncated or
+    corrupt) this raises :class:`CorruptedSecretError` rather than
+    regenerating: silently minting a new key would permanently destroy
+    the ability to decrypt existing encrypted-storage payloads, so we
+    fail loudly and leave the damaged file in place for recovery.
     """
     path = secrets_file_path(config_dir)
     if path.exists():
@@ -72,5 +80,11 @@ def get_workspace_key(config_dir: Path | None = None) -> bytes:
             raise RuntimeError(f"failed to read {path}: {exc}") from exc
         if len(existing) >= _KEY_BYTES:
             return existing[:_KEY_BYTES]
-        # Truncated; fall through and regenerate.
+        raise CorruptedSecretError(
+            f"{path} exists but is {len(existing)} bytes "
+            f"(expected >= {_KEY_BYTES}); refusing to overwrite the "
+            "workspace key. Restore secrets.bin from backup, or delete it "
+            "to start a fresh workspace — existing encrypted backups and "
+            "paired devices will be unrecoverable if you do."
+        )
     return _generate_and_write(path)

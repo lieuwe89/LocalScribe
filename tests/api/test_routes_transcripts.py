@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from speechtotext.api.app import create_app
+from tests.api._signing import signed_headers
 
 
 # ── Signed-request helpers (block 5c) ──────────────────────────────────────
@@ -47,15 +48,12 @@ def _signed_patch(
     the bytes the server reads back via ``await request.body()``.
     """
     body_bytes = json.dumps(body).encode("utf-8")
-    msg = b"PATCH\n" + path.encode("ascii") + b"\n" + body_bytes
-    sig = sk.sign(msg).signature
     return client.patch(
         path,
         content=body_bytes,
         headers={
             "Content-Type": "application/json",
-            "X-Device-Id": device_id,
-            "X-Signature-B64": base64.b64encode(sig).decode("ascii"),
+            **signed_headers(sk, device_id, "PATCH", path, body_bytes),
         },
     )
 
@@ -103,6 +101,41 @@ def test_patch_relabel_rewrites_sidecar(app_with_lib, tmp_path):
     assert r.status_code == 200
     raw = json.loads((tmp_path / "meet.json").read_text())
     assert raw["speakers"]["SPEAKER_00"] == "Bob"
+
+
+def test_transcript_locks_are_weakly_held(app_with_lib):
+    # One lock per transcript id, held forever, is a slow leak on a
+    # long-running desktop app. Once no request holds a transcript's lock
+    # it should be garbage-collected out of the registry.
+    import gc
+
+    from speechtotext.api.routes_transcripts import _get_transcript_lock
+
+    lock = _get_transcript_lock(app_with_lib.state, "tid-1")
+    assert app_with_lib.state.transcript_locks.get("tid-1") is lock
+    del lock
+    gc.collect()
+    assert app_with_lib.state.transcript_locks.get("tid-1") is None
+
+
+def test_relabel_takes_transcript_lock(app_with_lib, monkeypatch):
+    # Bulk relabel does a read-modify-write on the same sidecar file as
+    # the CRDT PATCH op. It must take the same per-transcript lock so a
+    # concurrent CRDT write can't be clobbered (and vice versa).
+    import speechtotext.api.routes_transcripts as rt
+
+    seen: list[str] = []
+    real = rt._get_transcript_lock
+
+    def spy(state, tid):
+        seen.append(tid)
+        return real(state, tid)
+
+    monkeypatch.setattr(rt, "_get_transcript_lock", spy)
+    client = TestClient(app_with_lib)
+    r = client.patch("/transcripts/meet/relabel", json={"SPEAKER_00": "Bob"})
+    assert r.status_code == 200, r.text
+    assert "meet" in seen
 
 
 # ── PATCH /transcripts/{tid} (CRDT op) ─────────────────────────────────────
@@ -353,15 +386,12 @@ class TestPatchTranscriptOpAuth:
         client = TestClient(app_with_lib)
         sk = SigningKey.generate()
         body_bytes = json.dumps(self._body()).encode("utf-8")
-        msg = b"PATCH\n/transcripts/meet\n" + body_bytes
-        sig = sk.sign(msg).signature
         r = client.patch(
             "/transcripts/meet",
             content=body_bytes,
             headers={
                 "Content-Type": "application/json",
-                "X-Device-Id": "dev-unknown000",
-                "X-Signature-B64": base64.b64encode(sig).decode("ascii"),
+                **signed_headers(sk, "dev-unknown000", "PATCH", "/transcripts/meet", body_bytes),
             },
         )
         assert r.status_code == 401
@@ -374,15 +404,12 @@ class TestPatchTranscriptOpAuth:
         _, dev_id = _pair_device(client)
         wrong_sk = SigningKey.generate()
         body_bytes = json.dumps(self._body()).encode("utf-8")
-        msg = b"PATCH\n/transcripts/meet\n" + body_bytes
-        sig = wrong_sk.sign(msg).signature
         r = client.patch(
             "/transcripts/meet",
             content=body_bytes,
             headers={
                 "Content-Type": "application/json",
-                "X-Device-Id": dev_id,
-                "X-Signature-B64": base64.b64encode(sig).decode("ascii"),
+                **signed_headers(wrong_sk, dev_id, "PATCH", "/transcripts/meet", body_bytes),
             },
         )
         assert r.status_code == 401
@@ -393,31 +420,27 @@ class TestPatchTranscriptOpAuth:
         sk, dev_id = _pair_device(client)
         signed_body = json.dumps(self._body()).encode("utf-8")
         tampered_body = json.dumps({**self._body(), "value": "TAMPERED"}).encode("utf-8")
-        msg = b"PATCH\n/transcripts/meet\n" + signed_body
-        sig = sk.sign(msg).signature
+        # Sign the original body but send the tampered one → must not verify.
         r = client.patch(
             "/transcripts/meet",
             content=tampered_body,
             headers={
                 "Content-Type": "application/json",
-                "X-Device-Id": dev_id,
-                "X-Signature-B64": base64.b64encode(sig).decode("ascii"),
+                **signed_headers(sk, dev_id, "PATCH", "/transcripts/meet", signed_body),
             },
         )
         assert r.status_code == 401
 
     def test_bad_signature_encoding_returns_401(self, app_with_lib):
         client = TestClient(app_with_lib)
-        _, dev_id = _pair_device(client)
-        r = client.patch(
-            "/transcripts/meet",
-            content=json.dumps(self._body()).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "X-Device-Id": dev_id,
-                "X-Signature-B64": "$$$ not base64 $$$",
-            },
-        )
+        sk, dev_id = _pair_device(client)
+        body_bytes = json.dumps(self._body()).encode()
+        headers = {
+            "Content-Type": "application/json",
+            **signed_headers(sk, dev_id, "PATCH", "/transcripts/meet", body_bytes),
+        }
+        headers["X-Signature-B64"] = "$$$ not base64 $$$"
+        r = client.patch("/transcripts/meet", content=body_bytes, headers=headers)
         assert r.status_code == 401
 
     def test_successful_call_updates_last_seen(self, app_with_lib):

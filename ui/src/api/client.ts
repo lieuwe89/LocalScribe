@@ -51,6 +51,15 @@ export async function baseUrl(): Promise<string> {
   return (await sidecarInfo()).url;
 }
 
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']);
+
+// Only methods that are safe to repeat may be retried on a network error.
+// A POST/PATCH can reach the server and have its response lost; resending it
+// would duplicate the side effect (e.g. queue a second transcription job).
+function isIdempotent(method: string | undefined): boolean {
+  return IDEMPOTENT_METHODS.has((method ?? 'GET').toUpperCase());
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const info = await sidecarInfo();
   const headers = new Headers(init?.headers);
@@ -63,7 +72,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       return r.json() as Promise<T>;
     } catch (e) {
       lastErr = e;
-      if (e instanceof TypeError) {
+      if (e instanceof TypeError && isIdempotent(init?.method)) {
         await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
         continue;
       }

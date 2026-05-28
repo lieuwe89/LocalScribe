@@ -469,7 +469,7 @@ class LibraryDB:
             ).fetchone()
         return Path(row["json_path"]) if row else None
 
-    def list_since(self, since: float, limit: int = 10000) -> list[dict]:
+    def list_since(self, since: float, limit: int = 10000, offset: int = 0) -> list[dict]:
         """Return transcripts whose json file mtime is greater than ``since``.
 
         Used by the sync delta endpoint to enumerate transcripts that
@@ -489,10 +489,10 @@ class LibraryDB:
                        error, json_mtime
                 FROM transcripts
                 WHERE json_mtime > ?
-                ORDER BY json_mtime ASC
-                LIMIT ?
+                ORDER BY json_mtime ASC, json_path ASC
+                LIMIT ? OFFSET ?
                 """,
-                (since, limit),
+                (since, limit, offset),
             ).fetchall()
         items = []
         for r in rows:

@@ -49,3 +49,77 @@ async def test_runner_emits_stage_line_complete(tmp_path):
     assert "LineEvent" in types
     assert types[-1] == "CompleteEvent"
     assert reg.get(job_id).status == JobStatus.complete
+
+
+@pytest.mark.asyncio
+async def test_concurrency_cap_queues_second_job(tmp_path, monkeypatch):
+    """With the slot cap at 1, a second job must queue, not load models.
+
+    Two model-loading jobs running at once is the OOM risk. We force the
+    first job's pipeline to block while holding the only slot, then assert
+    the second job's first emitted event is the ``queued`` stage rather
+    than ``load``. Releasing the first frees the slot so the second runs.
+    """
+    import threading
+
+    import speechtotext.api.runner as runner_mod
+
+    monkeypatch.setattr(
+        runner_mod, "_TRANSCRIBE_SEM", threading.BoundedSemaphore(1)
+    )
+    monkeypatch.setattr(runner_mod, "get_workspace_id", lambda: "ws_test")
+    monkeypatch.setattr(
+        runner_mod,
+        "write_transcript",
+        lambda t, workspace_id=None: (
+            tmp_path / "x.txt",
+            tmp_path / "x.json",
+        ),
+    )
+
+    a_running = threading.Event()
+    release_a = threading.Event()
+
+    def fake_build(cfg, backend):
+        pipe = MagicMock()
+
+        def run(audio, **kwargs):
+            a_running.set()
+            assert release_a.wait(timeout=5)
+            return _fake_transcript(audio)
+
+        pipe.run.side_effect = run
+        return (pipe, "cpu")
+
+    monkeypatch.setattr(runner_mod, "_build_pipeline", fake_build)
+
+    audio_a = tmp_path / "a.mp3"
+    audio_a.write_bytes(b"a")
+    audio_b = tmp_path / "b.mp3"
+    audio_b.write_bytes(b"b")
+    reg = JobRegistry()
+    job_a = reg.create(kind="transcribe", audio_path=str(audio_a))
+    job_b = reg.create(kind="transcribe", audio_path=str(audio_b))
+
+    sub_b = reg.subscribe(job_b)
+    run_transcribe_job(reg, job_a, audio_a)
+
+    # Drive the loop until job A is inside pipeline.run holding the slot.
+    for _ in range(100):
+        if a_running.is_set():
+            break
+        await asyncio.sleep(0.02)
+    assert a_running.is_set()
+
+    run_transcribe_job(reg, job_b, audio_b)
+
+    first_b = await asyncio.wait_for(sub_b.__anext__(), timeout=5)
+    assert isinstance(first_b, StageEvent)
+    assert first_b.stage == "queued"
+
+    release_a.set()  # let A finish and release the slot
+    events_b = [first_b]
+    async for ev in sub_b:
+        events_b.append(ev)
+    assert type(events_b[-1]).__name__ == "CompleteEvent"
+    assert reg.get(job_b).status == JobStatus.complete

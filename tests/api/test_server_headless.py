@@ -15,14 +15,65 @@ from speechtotext.api import server
 
 @pytest.fixture
 def fake_uvicorn(monkeypatch):
-    """Replace ``uvicorn.run`` so the test doesn't actually start a server."""
+    """Replace ``uvicorn.run`` so the test doesn't actually start a server.
+
+    Also sets LOCALLEXIS_API_TOKEN by default: the public-bind auth guard
+    refuses to start an unauthenticated server on 0.0.0.0, so the bind-path
+    tests below run as a correctly-configured deployment would. The auth
+    guard itself is covered explicitly in TestHeadlessAuth.
+    """
     calls: list[dict] = []
 
     def fake_run(app, **kwargs):
         calls.append({"app": app, **kwargs})
 
     monkeypatch.setattr(server.uvicorn, "run", fake_run)
+    monkeypatch.setenv("LOCALLEXIS_API_TOKEN", "fixture-token")
     return calls
+
+
+class TestHeadlessAuth:
+    """Public (non-loopback) binds must not run unauthenticated.
+
+    The bearer middleware is disabled when LOCALLEXIS_API_TOKEN is unset.
+    That's fine on loopback, but on 0.0.0.0 it would expose /config,
+    /transcripts, /pair/tokens and job control to the network, so headless
+    must fail closed unless anonymous mode is explicitly requested.
+    """
+
+    def test_public_bind_without_token_exits(self, fake_uvicorn, monkeypatch):
+        monkeypatch.delenv("LOCALLEXIS_API_TOKEN", raising=False)
+        monkeypatch.delenv("LOCALLEXIS_ALLOW_ANONYMOUS", raising=False)
+        monkeypatch.delenv("LOCALLEXIS_HOST", raising=False)  # defaults 0.0.0.0
+        monkeypatch.delenv("LOCALLEXIS_PORT", raising=False)
+        with pytest.raises(SystemExit) as exc:
+            server.headless()
+        assert "LOCALLEXIS_API_TOKEN" in str(exc.value)
+        assert fake_uvicorn == [], "must not bind when failing closed"
+
+    def test_public_bind_with_token_runs(self, fake_uvicorn, monkeypatch):
+        monkeypatch.setenv("LOCALLEXIS_API_TOKEN", "secret")
+        monkeypatch.delenv("LOCALLEXIS_HOST", raising=False)
+        monkeypatch.delenv("LOCALLEXIS_PORT", raising=False)
+        server.headless()
+        assert len(fake_uvicorn) == 1
+
+    def test_public_bind_with_allow_anonymous_runs(self, fake_uvicorn, monkeypatch):
+        monkeypatch.delenv("LOCALLEXIS_API_TOKEN", raising=False)
+        monkeypatch.setenv("LOCALLEXIS_ALLOW_ANONYMOUS", "1")
+        monkeypatch.delenv("LOCALLEXIS_HOST", raising=False)
+        monkeypatch.delenv("LOCALLEXIS_PORT", raising=False)
+        server.headless()
+        assert len(fake_uvicorn) == 1
+
+    def test_loopback_bind_without_token_runs(self, fake_uvicorn, monkeypatch):
+        # Loopback dev server (stt-style) stays anonymous-friendly.
+        monkeypatch.delenv("LOCALLEXIS_API_TOKEN", raising=False)
+        monkeypatch.delenv("LOCALLEXIS_ALLOW_ANONYMOUS", raising=False)
+        monkeypatch.setenv("LOCALLEXIS_HOST", "127.0.0.1")
+        monkeypatch.delenv("LOCALLEXIS_PORT", raising=False)
+        server.headless()
+        assert len(fake_uvicorn) == 1
 
 
 class TestHeadless:

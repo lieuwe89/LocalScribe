@@ -26,6 +26,13 @@ Environment="LOCALLEXIS_PORT=8765"
 # data dir on first start. Override to 0 only if TLS is terminated by a
 # reverse proxy in front of this unit.
 Environment="LOCALLEXIS_TLS_ENABLED=1"
+# REQUIRED on this public (0.0.0.0) bind: without an admin token the hub
+# refuses to start, because the admin API (config, transcripts, pairing-token
+# minting, job control) would otherwise be unauthenticated on the network.
+# Generate a secret — `openssl rand -hex 32` — and set it below (or point an
+# EnvironmentFile= at one). To bind without a token on a trusted/isolated
+# network, set LOCALLEXIS_ALLOW_ANONYMOUS=1 instead.
+#Environment="LOCALLEXIS_API_TOKEN=replace-with-a-generated-secret"
 ExecStart=/opt/locallexis/.venv/bin/locallexis-hub
 Restart=on-failure
 RestartSec=5

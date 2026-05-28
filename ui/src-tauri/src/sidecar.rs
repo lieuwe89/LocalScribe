@@ -255,9 +255,17 @@ pub fn restart(app: &AppHandle) -> Result<(), String> {
 ///      multiprocessing children.
 ///   2. Poll for up to ~2s waiting for the child to exit on its own.
 ///   3. SIGKILL the child as a fallback if step 2 timed out.
-///   4. Recursively walk descendants via `pgrep -P` and SIGKILL any
-///      that survived (covers grandchildren spawned by the sidecar's
-///      own subprocess calls — e.g. ffmpeg).
+///   4. Recursively walk descendants via `pgrep -P` and signal any that
+///      survived (covers grandchildren spawned by the sidecar's own
+///      subprocess calls — e.g. ffmpeg). Each saved PID's start time is
+///      re-checked before signalling so a PID recycled during the grace
+///      period is never signalled.
+///
+/// PID-tracking (rather than a process group / `kill(-pgid)`) is forced by
+/// two constraints: the PyInstaller bootloader runs as a separate parent
+/// process from the Python interpreter, and `tauri-plugin-shell` exposes no
+/// `pre_exec` hook to put the spawned tree in its own group. The start-time
+/// re-validation closes the PID-recycling hole that bare PID tracking opens.
 ///
 /// On non-Unix we fall back to the plain `CommandChild::kill()` path.
 pub fn terminate_child_tree(child: CommandChild) {
@@ -289,18 +297,26 @@ pub fn terminate_child_tree(child: CommandChild) {
             // though we didn't call kill() on the now-exited process.
             drop(child);
         }
-        // Sweep any descendants that survived the SIGTERM cascade.
-        // SIGTERM first so Python's atexit + multiprocessing cleanup
+        // Sweep any descendants that survived the SIGTERM cascade. Before
+        // signalling each saved PID, re-validate it still refers to the SAME
+        // process (matching start time): during the grace period a descendant
+        // can exit and the kernel can recycle its PID for an unrelated program
+        // (a browser, a database, ...), and signalling that would kill or
+        // crash it. SIGTERM first so Python's atexit + multiprocessing cleanup
         // can fire; SIGKILL fallback after a brief grace period.
         for d in &descendants {
-            unsafe {
-                libc::kill(*d, libc::SIGTERM);
+            if descendant_is_still_ours(d) {
+                unsafe {
+                    libc::kill(d.0, libc::SIGTERM);
+                }
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(300));
         for d in &descendants {
-            unsafe {
-                libc::kill(*d, libc::SIGKILL);
+            if descendant_is_still_ours(d) {
+                unsafe {
+                    libc::kill(d.0, libc::SIGKILL);
+                }
             }
         }
     }
@@ -310,8 +326,43 @@ pub fn terminate_child_tree(child: CommandChild) {
     }
 }
 
+/// A descendant PID plus a snapshot of its start time, used to detect PID
+/// recycling. The kernel reuses PIDs, so a saved PID alone is not a stable
+/// identity — pairing it with the process start time lets us confirm we're
+/// still looking at the *same* process before signalling it.
 #[cfg(unix)]
-fn collect_descendants(root_pid: i32) -> Vec<i32> {
+type Descendant = (i32, String);
+
+/// Best-effort process start time for `pid` via `ps -o lstart=`. `lstart` is
+/// an absolute timestamp (supported by both BSD/macOS and procps `ps`), so it
+/// changes when a PID is recycled. Returns `None` if the process is gone.
+#[cfg(unix)]
+fn proc_start_time(pid: i32) -> Option<String> {
+    let output = std::process::Command::new("ps")
+        .args(["-o", "lstart=", "-p", &pid.to_string()])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
+/// True if `d`'s PID still refers to the same process we recorded (same start
+/// time). False if the process has exited or the PID was recycled for an
+/// unrelated program — in which case we must NOT signal it.
+#[cfg(unix)]
+fn descendant_is_still_ours(d: &Descendant) -> bool {
+    matches!(proc_start_time(d.0), Some(st) if st == d.1)
+}
+
+#[cfg(unix)]
+fn collect_descendants(root_pid: i32) -> Vec<Descendant> {
     let mut out = Vec::new();
     let mut stack = vec![root_pid];
     while let Some(pid) = stack.pop() {
@@ -323,7 +374,11 @@ fn collect_descendants(root_pid: i32) -> Vec<i32> {
             for line in String::from_utf8_lossy(&o.stdout).lines() {
                 if let Ok(child_pid) = line.trim().parse::<i32>() {
                     stack.push(child_pid);
-                    out.push(child_pid);
+                    // Record the start time now so we can detect later if this
+                    // PID gets recycled during the SIGTERM grace period.
+                    if let Some(start) = proc_start_time(child_pid) {
+                        out.push((child_pid, start));
+                    }
                 }
             }
         }

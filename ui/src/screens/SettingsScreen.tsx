@@ -93,6 +93,11 @@ export function SettingsScreen() {
   const [devices, setDevices] = useState<PairedDevice[]>([]);
   const [pairingPayload, setPairingPayload] = useState<PairingPayloadV1 | null>(null);
   const [pairingError, setPairingError] = useState<string | null>(null);
+  // Kept so the user can re-target the pairing URL at a different network
+  // interface (e.g. when the first discovered address is a VPN/virtual one).
+  const [hubInfo, setHubInfo] = useState<HubInfo | null>(null);
+  const [mintedToken, setMintedToken] = useState<PairingToken | null>(null);
+  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -120,6 +125,9 @@ export function SettingsScreen() {
     setHubBusy(true);
     setPairingPayload(null);
     setPairingError(null);
+    setHubInfo(null);
+    setMintedToken(null);
+    setSelectedAddress(null);
     try {
       const updated = await invoke<HubState>('set_hub_state', { enabled, port: hub.port });
       setHub(updated);
@@ -136,10 +144,21 @@ export function SettingsScreen() {
     try {
       const minted = await api<PairingToken>('/pair/tokens', { method: 'POST' });
       const info = await api<HubInfo>('/hub/info');
-      setPairingPayload(buildPairingPayload(info, minted, hub.port));
+      const addr = info.lan_addresses[0];
+      const payload = buildPairingPayload(info, minted, hub.port, addr);
+      setHubInfo(info);
+      setMintedToken(minted);
+      setSelectedAddress(addr ?? null);
+      setPairingPayload(payload);
     } catch (e) {
       setPairingError(String(e));
     }
+  };
+
+  const chooseAddress = (addr: string) => {
+    if (!hub || !hubInfo || !mintedToken) return;
+    setSelectedAddress(addr);
+    setPairingPayload(buildPairingPayload(hubInfo, mintedToken, hub.port, addr));
   };
 
   const refreshDevices = async () => {
@@ -260,6 +279,19 @@ export function SettingsScreen() {
               <button type="button" onClick={mintPairingToken} disabled={hubBusy}>
                 Generate pairing code
               </button>
+              {hubInfo && hubInfo.lan_addresses.length > 1 && (
+                <label style={{ display: 'block', marginTop: '0.5rem', fontSize: '0.9em' }}>
+                  Network address:{' '}
+                  <select
+                    value={selectedAddress ?? ''}
+                    onChange={(e) => chooseAddress(e.target.value)}
+                  >
+                    {hubInfo.lan_addresses.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {pairingPayload && (
                 <pre
                   style={{

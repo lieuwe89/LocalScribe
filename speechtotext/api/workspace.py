@@ -27,6 +27,15 @@ from speechtotext.api.library_db import default_app_data_dir
 _FILENAME = "workspace.json"
 
 
+class CorruptedWorkspaceError(RuntimeError):
+    """Raised when workspace.json exists but is unreadable/unparseable.
+
+    Distinguishes a corrupt identity file (fatal — refuse to regenerate, a
+    new workspace_id would break every paired device) from a missing one
+    (fine — generate a fresh identity).
+    """
+
+
 def workspace_file_path(config_dir: Path | None = None) -> Path:
     """Resolve the path to the workspace identity file.
 
@@ -52,11 +61,24 @@ def _load(config_dir: Path | None) -> dict:
     if not path.exists():
         return {}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        # Corrupt file — treat as missing; caller will regenerate.
-        return {}
-    return data if isinstance(data, dict) else {}
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CorruptedWorkspaceError(f"failed to read {path}: {exc}") from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise CorruptedWorkspaceError(
+            f"{path} exists but is not valid JSON: {exc}. Refusing to "
+            "regenerate — a new workspace_id would break every paired "
+            "device. Restore the file from backup, or delete it to start "
+            "a fresh workspace."
+        ) from exc
+    if not isinstance(data, dict):
+        raise CorruptedWorkspaceError(
+            f"{path} does not contain a JSON object; refusing to "
+            "regenerate. Restore from backup, or delete it to reset."
+        )
+    return data
 
 
 def _save(data: dict, config_dir: Path | None) -> None:

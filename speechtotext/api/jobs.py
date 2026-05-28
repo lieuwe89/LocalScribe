@@ -16,6 +16,12 @@ from speechtotext.api.events import (
 )
 
 
+# Cap on retained job records. The sidecar is a long-lived desktop process;
+# completed/failed jobs past this cap are evicted oldest-first so the
+# in-memory registry doesn't grow without bound.
+MAX_JOBS = 200
+
+
 class JobStatus(str, enum.Enum):
     pending = "pending"
     running = "running"
@@ -49,7 +55,25 @@ class JobRegistry:
         job_id = uuid.uuid4().hex
         self._jobs[job_id] = JobRecord(id=job_id, kind=kind, audio_path=audio_path)
         self._queues[job_id] = []
+        self._prune()
         return job_id
+
+    def _prune(self) -> None:
+        """Evict oldest terminal jobs once over the cap.
+
+        Dicts preserve insertion order, so iterating yields oldest first.
+        Only completed/failed jobs with no live subscribers are dropped,
+        so in-flight jobs and attached SSE streams are never disturbed.
+        """
+        if len(self._jobs) <= MAX_JOBS:
+            return
+        for jid in list(self._jobs.keys()):
+            if len(self._jobs) <= MAX_JOBS:
+                break
+            rec = self._jobs[jid]
+            if rec.status in (JobStatus.complete, JobStatus.failed) and not self._queues.get(jid):
+                del self._jobs[jid]
+                self._queues.pop(jid, None)
 
     def get(self, job_id: str) -> JobRecord:
         return self._jobs[job_id]

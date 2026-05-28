@@ -44,12 +44,15 @@ class TestGetWorkspaceKey:
         assert mode & 0o077 == 0, f"expected 0600-ish, got {oct(mode)}"
         assert mode & 0o600 == 0o600
 
-    def test_truncated_file_regenerates(self, config_dir: Path) -> None:
-        # Pre-populate with a too-short file.
+    def test_truncated_file_raises(self, config_dir: Path) -> None:
+        # A too-short file is corrupt, not missing: regenerating would
+        # silently destroy the workspace key W. Fail loudly and leave the
+        # damaged file intact so the user can restore from backup.
         config_dir.mkdir(parents=True)
         (config_dir / "secrets.bin").write_bytes(b"short")
-        key = secrets_store.get_workspace_key(config_dir)
-        assert len(key) == 32
+        with pytest.raises(secrets_store.CorruptedSecretError):
+            secrets_store.get_workspace_key(config_dir)
+        assert (config_dir / "secrets.bin").read_bytes() == b"short"
 
     def test_keys_are_random(self, tmp_path: Path) -> None:
         # Vanishingly unlikely two consecutive 32-byte tokens collide,

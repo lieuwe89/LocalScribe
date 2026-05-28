@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 from pathlib import Path
 
@@ -20,6 +21,23 @@ from speechtotext.models import ProgressEvent, Transcript
 from speechtotext.pipeline import CancelledError, Pipeline
 from speechtotext.api.workspace import get_workspace_id
 from speechtotext.writer import write_transcript
+
+
+def _max_concurrent_transcribe() -> int:
+    raw = os.environ.get("LOCALLEXIS_MAX_CONCURRENT_TRANSCRIBE")
+    if raw is None:
+        return 1
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 1
+
+
+# Global cap on simultaneous transcription jobs. Each job loads ASR +
+# diarization models, so launching several at once (e.g. six files dropped
+# into a watched folder together) exhausts RAM/GPU memory and crashes the
+# sidecar. Jobs past the cap wait in their own thread before loading models.
+_TRANSCRIBE_SEM = threading.BoundedSemaphore(_max_concurrent_transcribe())
 
 
 def _build_pipeline(cfg: Config, cli_backend: str | None) -> tuple[Pipeline, str]:
@@ -66,7 +84,18 @@ def run_transcribe_job(
     _CANCEL_EVENTS[job_id] = cancel
 
     def _work() -> None:
+        acquired = False
         try:
+            # Bound concurrent model-loading jobs. Try immediately; if the
+            # slot is taken, surface a 'queued' stage and wait for a slot,
+            # honouring cancellation while blocked.
+            if not _TRANSCRIBE_SEM.acquire(blocking=False):
+                emit(StageEvent(stage="queued", percent=0.0))
+                while not _TRANSCRIBE_SEM.acquire(timeout=0.5):
+                    if cancel.is_set():
+                        emit(ErrorEvent(message="cancelled"))
+                        return
+            acquired = True
             emit(StageEvent(stage="load", percent=0.0))
             cfg = load_config(config_path=config_path)
             pipeline, _resolved = _build_pipeline(cfg, backend)
@@ -95,6 +124,8 @@ def run_transcribe_job(
         except Exception as exc:  # noqa: BLE001
             emit(ErrorEvent(message=f"{type(exc).__name__}: {exc}"))
         finally:
+            if acquired:
+                _TRANSCRIBE_SEM.release()
             _CANCEL_EVENTS.pop(job_id, None)
             if _own_loop:
                 loop.call_soon_threadsafe(loop.stop)

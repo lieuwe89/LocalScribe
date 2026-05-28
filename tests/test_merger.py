@@ -58,3 +58,31 @@ def test_empty_turns_yields_all_unknown():
 
 def test_empty_segments_yields_empty():
     assert merge([], [SpeakerTurn(0.0, 1.0, "SPEAKER_00")]) == []
+
+
+def test_handles_unsorted_segments_and_spanning_turn():
+    # Guards the linear two-pointer sweep: segments are given out of time
+    # order and a single long turn spans all of them. Output order must
+    # match input order, and every segment must resolve to the turn.
+    segs = [
+        Segment(5.0, 6.0, "third", "en"),
+        Segment(0.0, 1.0, "first", "en"),
+        Segment(2.0, 3.0, "second", "en"),
+    ]
+    turns = [SpeakerTurn(0.0, 10.0, "SPEAKER_00")]
+    out = merge(segs, turns)
+    assert [s.text for s in out] == ["third", "first", "second"]
+    assert all(s.speaker_id == "SPEAKER_00" for s in out)
+
+
+def test_picks_max_overlap_across_many_turns():
+    # A segment overlapping several turns must pick the maximum-overlap
+    # one even when it is not the first or last turn by start time.
+    segs = [Segment(0.0, 10.0, "long", "en")]
+    turns = [
+        SpeakerTurn(0.0, 1.0, "S0"),   # 1s
+        SpeakerTurn(1.0, 7.0, "S1"),   # 6s → wins
+        SpeakerTurn(7.0, 9.0, "S2"),   # 2s
+    ]
+    out = merge(segs, turns)
+    assert out[0].speaker_id == "S1"

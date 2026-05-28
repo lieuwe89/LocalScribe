@@ -94,9 +94,10 @@ def list_transcripts(
     limit: int = Query(default=200, ge=1, le=1000),
 ) -> list[dict]:
     db = request.app.state.library_db
-    # Cheap drift check before responding so the user sees rows that match
-    # what's actually on disk right now.
-    db.sync_dirs(list(request.app.state.library_dirs))
+    # Reconcile before responding so the user sees rows matching disk. The
+    # reconciler skips the walk when no library dir's mtime changed, so
+    # search-as-you-type doesn't stat every file on every keystroke.
+    request.app.state.library_reconciler.reconcile(request.app.state.library_dirs)
     if q:
         return db.search(q, limit=limit)
     return db.list(limit=limit)
@@ -123,12 +124,17 @@ def patch_relabel(tid: str, mapping: dict[str, str], request: Request) -> dict:
     p = db.get_path(tid) or find_sidecar(request.app.state.library_dirs, tid)
     if p is None or not p.exists():
         raise HTTPException(status_code=404, detail=f"transcript not found: {tid}")
-    try:
-        relabel(p, mapping)
-    except KeyError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    # speaker_labels participate in FTS, so reindex this row after relabel
-    db.upsert_path(p)
+    # Take the same per-transcript lock as the CRDT PATCH op: relabel does a
+    # read-modify-write on the sidecar JSON, so without it a concurrent
+    # PATCH /transcripts/{tid} could be clobbered (and vice versa).
+    lock = _get_transcript_lock(request.app.state, tid)
+    with lock:
+        try:
+            relabel(p, mapping)
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        # speaker_labels participate in FTS, so reindex this row after relabel
+        db.upsert_path(p)
     return {"ok": True}
 
 

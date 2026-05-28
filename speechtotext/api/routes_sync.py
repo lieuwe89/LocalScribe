@@ -40,7 +40,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from speechtotext.api.auth import verify_device_signature
@@ -60,14 +60,16 @@ class SyncResponse(BaseModel):
     )
 
 
-def _build_delta(request: Request, *, since: float) -> SyncResponse:
+def _build_delta(
+    request: Request, *, since: float, limit: int = 10000, offset: int = 0
+) -> SyncResponse:
     db = request.app.state.library_db
-    # Cheap drift check before responding so the response reflects
-    # what's actually on disk right now. sync_dirs is fast when
-    # nothing has changed (mtime+size short-circuit).
-    db.sync_dirs(list(request.app.state.library_dirs))
+    # Reconcile before responding so the delta reflects disk. The reconciler
+    # skips the walk entirely when no library dir's mtime changed, so idle
+    # device polls don't stat every transcript file each time.
+    request.app.state.library_reconciler.reconcile(request.app.state.library_dirs)
 
-    rows = db.list_since(since)
+    rows = db.list_since(since, limit=limit, offset=offset)
 
     new_cursor = since
     docs: list[dict[str, Any]] = []
@@ -104,13 +106,18 @@ def _build_delta(request: Request, *, since: float) -> SyncResponse:
 def sync_snapshot(
     request: Request,
     device_id: str = Depends(verify_device_signature),
+    limit: int = Query(10000, ge=1, le=10000),
+    offset: int = Query(0, ge=0),
 ) -> SyncResponse:
-    """Return every transcript currently in the workspace.
+    """Return transcripts in the workspace, oldest-mtime first.
 
-    Used by new devices on first connect; the returned cursor is the
-    starting point for subsequent ``/sync/since`` polls.
+    Used by new devices on first connect. For large libraries, page with
+    ``?limit=N&offset=M``: walk ``offset`` 0, N, 2N, … until a page returns
+    fewer than ``limit`` rows, then use the *last* page's ``cursor`` as the
+    starting point for subsequent ``/sync/since`` polls. Default ``limit``
+    returns the whole library in one response.
     """
-    return _build_delta(request, since=0.0)
+    return _build_delta(request, since=0.0, limit=limit, offset=offset)
 
 
 @router.get("/sync/since/{cursor}", response_model=SyncResponse)
@@ -118,6 +125,12 @@ def sync_since(
     cursor: float,
     request: Request,
     device_id: str = Depends(verify_device_signature),
+    limit: int = Query(10000, ge=1, le=10000),
+    offset: int = Query(0, ge=0),
 ) -> SyncResponse:
-    """Return transcripts whose mtime is strictly greater than ``cursor``."""
-    return _build_delta(request, since=cursor)
+    """Return transcripts whose mtime is strictly greater than ``cursor``.
+
+    Supports the same ``limit``/``offset`` paging as ``/sync/snapshot`` for
+    unusually large deltas.
+    """
+    return _build_delta(request, since=cursor, limit=limit, offset=offset)

@@ -16,8 +16,15 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Minimum seconds between persisted last_seen updates for a given device.
+# Reads like /sync/since are polled frequently; without this throttle each
+# one would commit a SQLite write (and WAL flush) just to bump a timestamp
+# nobody reads at second-granularity.
+LAST_SEEN_MIN_INTERVAL_S = 300.0
 
 
 def _now_iso() -> str:
@@ -49,6 +56,8 @@ class DeviceRegistry:
         self.path = Path(db_path) if db_path else default_devices_db_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        # device_id -> monotonic time of the last persisted last_seen write.
+        self._last_seen_written: dict[str, float] = {}
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
@@ -86,6 +95,12 @@ class DeviceRegistry:
         return [dict(r) for r in rows]
 
     def update_last_seen(self, device_id: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            last = self._last_seen_written.get(device_id, 0.0)
+            if now - last < LAST_SEEN_MIN_INTERVAL_S:
+                return
+            self._last_seen_written[device_id] = now
         with self._lock, self._conn:
             self._conn.execute(
                 "UPDATE devices SET last_seen=? WHERE device_id=?",

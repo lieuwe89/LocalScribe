@@ -37,6 +37,18 @@ describe('buildPairingPayload', () => {
     expect(p.hub_url).toBe('https://192.168.1.50:8765');
   });
 
+  it('uses the explicitly chosen LAN address when provided', () => {
+    // A host with several interfaces (Ethernet, Wi-Fi, VPN, docker0) may
+    // list a virtual address first; the user must be able to pick another.
+    const p = buildPairingPayload(
+      { lan_addresses: ['10.8.0.3', '192.168.1.50'], tls_enabled: true, tls_spki_b64: 'X' },
+      token,
+      8765,
+      '192.168.1.50',
+    );
+    expect(p.hub_url).toBe('https://192.168.1.50:8765');
+  });
+
   it('throws when no LAN address is available', () => {
     expect(() =>
       buildPairingPayload(

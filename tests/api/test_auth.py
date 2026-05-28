@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from speechtotext.api.app import create_app
+from tests.api._signing import signed_headers
 
 
 TOKEN = "test-token-7e9f4a"
@@ -145,14 +146,9 @@ def test_signed_sync_snapshot_bypasses_bearer(auth_client):
     import base64
 
     sk, dev_id = _pair_lan_device(auth_client)
-    msg = b"GET\n/sync/snapshot\n"
-    sig = sk.sign(msg).signature
     r = auth_client.get(
         "/sync/snapshot",
-        headers={
-            "X-Device-Id": dev_id,
-            "X-Signature-B64": base64.b64encode(sig).decode("ascii"),
-        },
+        headers=signed_headers(sk, dev_id, "GET", "/sync/snapshot"),
     )
     assert r.status_code == 200, r.text
 
@@ -187,15 +183,12 @@ def test_signed_patch_transcript_bypasses_bearer(auth_client, tmp_path):
         "lamport_observed": 0,
     }
     body_bytes = json.dumps(body).encode("utf-8")
-    msg = b"PATCH\n/transcripts/meet\n" + body_bytes
-    sig = sk.sign(msg).signature
     r = auth_client.patch(
         "/transcripts/meet",
         content=body_bytes,
         headers={
             "Content-Type": "application/json",
-            "X-Device-Id": dev_id,
-            "X-Signature-B64": base64.b64encode(sig).decode("ascii"),
+            **signed_headers(sk, dev_id, "PATCH", "/transcripts/meet", body_bytes),
         },
     )
     assert r.status_code == 200, r.text

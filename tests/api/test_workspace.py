@@ -71,11 +71,15 @@ class TestEnsureBoth:
 
 
 class TestCorruption:
-    def test_corrupt_file_regenerates(self, config_dir: Path) -> None:
+    def test_corrupt_file_raises(self, config_dir: Path) -> None:
+        # Unparseable JSON is corruption, not a missing file. Regenerating
+        # would mint a new workspace_id and break every paired device, so
+        # fail loudly and leave the file intact for recovery.
         config_dir.mkdir(parents=True)
         (config_dir / "workspace.json").write_text("not valid json")
-        wid = workspace.get_workspace_id(config_dir)
-        assert wid.startswith("ws_")
+        with pytest.raises(workspace.CorruptedWorkspaceError):
+            workspace.get_workspace_id(config_dir)
+        assert (config_dir / "workspace.json").read_text() == "not valid json"
 
     def test_partial_file_completed(self, config_dir: Path) -> None:
         config_dir.mkdir(parents=True)
