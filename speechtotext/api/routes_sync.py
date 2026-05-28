@@ -78,7 +78,10 @@ def _build_delta(request: Request, *, since: float) -> SyncResponse:
         except (OSError, json.JSONDecodeError):
             # Index references a file that's gone or corrupt; skip.
             continue
-        docs.append(doc)
+        # Surface the transcript id (json file stem) on the wire — the
+        # index keys on it (json_path.stem) but it isn't inside the doc.
+        # Mobile clients require it to key rows.
+        docs.append({**doc, "id": path.stem})
         # Advance cursor monotonically. Rows are returned mtime-ASC so
         # the last value wins, but use max() defensively.
         new_cursor = max(new_cursor, float(row["json_mtime"]))

@@ -111,6 +111,16 @@ class TestSyncSnapshot:
         assert set(body.keys()) == {"workspace_id", "cursor", "transcripts"}
         assert "speakers" in body["transcripts"][0]
 
+    def test_snapshot_includes_transcript_id(self, app, tmp_path):
+        # Wire contract: every transcript carries a stable `id` (the json
+        # file stem) so mobile clients can key rows without inferring from
+        # audio_path. Android SyncClient.parseTranscript hard-fails without it.
+        _write_transcript(tmp_path, "alpha")
+        client = TestClient(app)
+        sk, dev_id = _pair(client)
+        body = _signed_get(client, sk, dev_id, "/sync/snapshot").json()
+        assert body["transcripts"][0]["id"] == "alpha"
+
 
 # ── Since ─────────────────────────────────────────────────────────────────
 
