@@ -1,8 +1,8 @@
 package app.locallexis.ui.format
 
-import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.OffsetDateTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.Locale
@@ -21,16 +21,23 @@ fun formatDuration(seconds: Double?): String {
     else String.format(Locale.US, "%d:%02d", m, s)
 }
 
-/** ISO-8601 -> "MMM d, yyyy". Unparseable -> raw string; null/blank -> "". */
+/**
+ * ISO-8601 -> "MMM d, yyyy". Tries offset date-time, then offset-less
+ * date-time, then date-only. Unparseable -> raw string; null/blank -> "".
+ */
 fun formatDate(iso: String?): String {
     if (iso.isNullOrBlank()) return ""
     return try {
         OffsetDateTime.parse(iso).format(DATE_OUT)
     } catch (_: DateTimeParseException) {
         try {
-            Instant.parse(iso).atZone(ZoneId.systemDefault()).format(DATE_OUT)
+            LocalDateTime.parse(iso).format(DATE_OUT)
         } catch (_: DateTimeParseException) {
-            iso
+            try {
+                LocalDate.parse(iso).format(DATE_OUT)
+            } catch (_: DateTimeParseException) {
+                iso
+            }
         }
     }
 }
