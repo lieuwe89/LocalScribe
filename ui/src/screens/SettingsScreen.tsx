@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useConfig } from '../stores/config';
-import { api } from '../api/client';
+import { api, resetSidecarInfo } from '../api/client';
 import type { ConfigDto } from '../api/types';
 import { buildPairingPayload, type HubInfo, type PairingPayloadV1 } from '../lib/pairing';
 
@@ -130,6 +130,9 @@ export function SettingsScreen() {
     setSelectedAddress(null);
     try {
       const updated = await invoke<HubState>('set_hub_state', { enabled, port: hub.port });
+      // The sidecar just respawned on a fresh loopback port + token; drop the
+      // stale connection cache so subsequent api() calls re-discover it.
+      resetSidecarInfo();
       setHub(updated);
     } catch (e) {
       setPairingError(`failed to ${enabled ? 'enable' : 'disable'} hub: ${e}`);

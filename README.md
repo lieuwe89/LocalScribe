@@ -39,14 +39,26 @@ the pipeline directly.
 - **Searchable library.** SQLite + FTS5 index keeps every transcript
   searchable by content, filename, and speaker. The `.json` files on disk
   remain canonical — the index is rebuildable from them at any time.
+- **Multi-device sync (Hub mode).** Opt-in: expose the API on your LAN, pair
+  a device with a single-use code, and sync transcripts to phones, tablets,
+  or other installs. Devices authenticate with per-device Ed25519 signatures;
+  the workspace key is handed over via a libsodium sealed box. Off by default
+  — nothing is exposed until you turn it on.
 
 ## Status
 
-v0.6.0. The CLI (`stt`) is stable. The desktop app covers the full core
+v0.8.1. The CLI (`stt`) is stable. The desktop app covers the full core
 workflow — drop file → transcribe → relabel → library / record from mic /
 watch folder / settings editor. The transcript library is backed by SQLite +
-FTS5 with ranked full-text search. Phase 2 (local RAG search via embeddings)
-has its schema in place; the chunker and embedder are next.
+FTS5 with ranked full-text search.
+
+**Hub mode** (opt-in, off by default) exposes the app's API on the local
+network so paired phones, tablets, or other LocalLexis installs can sync
+transcripts: mint a single-use pairing code, deliver the workspace key to a
+device via a sealed-box exchange, then sync over Ed25519-signed requests.
+
+Phase 2 (local RAG search via embeddings) has its schema in place; the
+chunker and embedder are next.
 
 ## Install
 
@@ -155,6 +167,14 @@ at launch, parses a JSON handshake from its stdout to discover the port,
 and kills it on quit. The frontend talks to it over REST + SSE. The ML
 layer is the same code that runs when you invoke `stt` from a terminal.
 
+With **Hub mode** on, the sidecar additionally binds HTTPS on
+`0.0.0.0:<hub-port>` (self-signed cert, pinned by paired devices via the
+pairing QR) for LAN devices, while the desktop webview keeps talking to it
+over plain HTTP on a loopback port. Pairing, the device registry, hub info,
+and `/sync/*` live in `routes_pairing`, `routes_devices`, `routes_hub`, and
+`routes_sync`; LAN requests authenticate with Ed25519 signatures rather than
+the desktop's bearer token.
+
 Detailed design lives in
 [docs/superpowers/specs/2026-05-15-stt-desktop-ui-design.md](docs/superpowers/specs/2026-05-15-stt-desktop-ui-design.md).
 The visual handoff (mockups, JSX prototypes, design tokens) lives in
@@ -231,6 +251,7 @@ cargo test --manifest-path ui/src-tauri/Cargo.toml --release
 - [ ] RAG Phase 3: vector search — `sqlite-vec` + hybrid BM25/cosine via RRF.
 - [ ] RAG Phase 4: summarization — local LLM vs cloud API decision still open.
 - [ ] Live streaming transcription from the mic (per-chunk ASR).
+- [ ] Bluetooth recorder companion — pair an ESP32 recorder over BLE and ingest its audio.
 - [ ] Plain-chrome window mode.
 
 ## License

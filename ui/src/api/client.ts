@@ -47,6 +47,15 @@ export async function sidecarInfo(): Promise<SidecarInfo> {
   return readyPromise;
 }
 
+// Drop the cached URL + token so the next api() call re-discovers the sidecar.
+// Toggling hub mode respawns the sidecar on a new loopback port with a new
+// bearer token; without this the cache would dial the dead old socket and
+// fetch would throw "TypeError: Load failed".
+export function resetSidecarInfo(): void {
+  cached = null;
+  readyPromise = null;
+}
+
 export async function baseUrl(): Promise<string> {
   return (await sidecarInfo()).url;
 }

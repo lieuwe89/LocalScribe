@@ -1,7 +1,7 @@
 # LocalLexis — session handoff & roadmap
 
 Snapshot for the next Claude session (or any human picking this up cold).
-Last updated: v0.6.0 (2026-05-17).
+Last updated: v0.8.1 (2026-05-28).
 
 ---
 
@@ -19,6 +19,15 @@ LocalLexis is a privacy-first on-device transcription app:
   WAV with soundfile
 - **Library**: SQLite + FTS5 at platform app-data dir;
   `.json` transcript files on disk remain canonical and portable.
+- **Hub mode** (opt-in, off by default): exposes the API on the LAN over
+  HTTPS (self-signed cert, pinned by paired devices) for multi-device sync.
+  Pairing mints a single-use token, hands the workspace key to the device in
+  a libsodium sealed box, and registers its Ed25519 pubkey; `/sync/*` and
+  transcript PATCH then authenticate by signature. `/hub/info` is
+  loopback-only so LAN scanners can't enumerate the host. The desktop UI
+  still dials the sidecar over a loopback HTTP port — toggling hub mode
+  respawns the sidecar on a new loopback port + token, so the frontend must
+  drop its cached `sidecarInfo` (see `resetSidecarInfo`).
 
 Recent CI runs have been "queued" for hours on the GitHub Actions side, but
 artifacts still publish to releases. The auto-updater picks them up.
@@ -321,6 +330,10 @@ The schema is ready (`chunks`, `embeddings` tables exist). To turn it on:
 
 | Version | What |
 |---|---|
+| 0.8.1 | Fix hub pairing: invalidate the cached sidecar URL+token on hub toggle so "Generate pairing code" no longer dials the dead pre-restart port (was failing with `TypeError: Load failed`) |
+| 0.8.0 | Hub security + robustness hardening from code review |
+| 0.7.6 | Hub `/sync` ids + `/hub/info` for the pairing QR |
+| 0.7.x | Multi-device hub: pairing tokens, device registry, sealed-box workspace key, Ed25519-signed `/sync` + transcript PATCH; Android client skeleton |
 | 0.6.0 | SQLite + FTS5 library, ranked search with snippets, RAG schema stubs |
 | 0.5.8 | Library search empty-state fix, broader field matching |
 | 0.5.7 | Drop misleading 0% from active stage chip |
