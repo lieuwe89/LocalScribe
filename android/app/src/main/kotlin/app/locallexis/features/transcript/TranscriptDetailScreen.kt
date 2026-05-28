@@ -77,7 +77,7 @@ private fun DetailHeader(transcript: TranscriptEntity, speakerCount: Int) {
             formatDate(transcript.createdAt).ifBlank { null },
             formatDuration(transcript.durationSeconds).ifBlank { null },
             transcript.language,
-            "$speakerCount speakers",
+            if (speakerCount > 0) "$speakerCount speakers" else null,
         ).joinToString(" · ")
         Text(
             text = meta,
@@ -98,7 +98,7 @@ private fun SegmentBubble(seg: SegmentRow) {
         Column(Modifier.padding(10.dp)) {
             val label = listOfNotNull(
                 seg.speakerName.ifBlank { null },
-                formatDuration(seg.startSec),
+                formatDuration(seg.startSec).ifBlank { null },
             ).joinToString(" · ")
             Text(
                 text = label,
@@ -132,6 +132,7 @@ private val previewSegments = listOf(
     SegmentRow(0, 0.0, 6.0, "Let's call the meeting to order.", "Chair"),
     SegmentRow(1, 6.0, 14.0, "Thank you. First item is the parks budget.", "Alvarez"),
     SegmentRow(2, 14.0, 20.0, "I move we table it until the survey lands.", "Ruiz"),
+    SegmentRow(3, 20.0, 27.0, "Noted for the record.", ""),
 )
 
 @Preview(showBackground = true)
