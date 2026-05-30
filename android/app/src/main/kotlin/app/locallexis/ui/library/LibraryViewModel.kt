@@ -49,8 +49,8 @@ data class TranscriptSummary(
  */
 class LibraryViewModel(
     private val transcriptDao: TranscriptDao,
-    private val sync: LibrarySync,
-    private val workspaceId: String,
+    private val syncProvider: () -> LibrarySync,
+    private val workspaceIdProvider: () -> String,
     private val scope: CoroutineScope,
 ) {
 
@@ -67,7 +67,7 @@ class LibraryViewModel(
     fun refresh() {
         scope.launch {
             try {
-                sync.incremental(workspaceId)
+                syncProvider().incremental(workspaceIdProvider())
                 _lastError.value = null
             } catch (e: Throwable) {
                 _lastError.value = e.message ?: e::class.simpleName ?: "sync failed"

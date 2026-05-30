@@ -205,6 +205,22 @@ export function SettingsScreen() {
     }
   };
 
+  const unpairDevice = async (d: PairedDevice) => {
+    const ok = window.confirm(
+      `Unpair "${d.name}"?\n\nThe device will lose sync access immediately. ` +
+      `It can re-pair by scanning a new pairing code.`,
+    );
+    if (!ok) return;
+    try {
+      await api(`/devices/paired/${encodeURIComponent(d.device_id)}`, {
+        method: 'DELETE',
+      });
+      setDevices((cur) => cur.filter((x) => x.device_id !== d.device_id));
+    } catch (e) {
+      window.alert(`Failed to unpair: ${e}`);
+    }
+  };
+
   const scanRecorders = async () => {
     setBleBusy(true);
     setBleError(null);
@@ -506,15 +522,33 @@ export function SettingsScreen() {
           ) : (
             <ul style={{ listStyle: 'none', padding: 0 }}>
               {devices.map((d) => (
-                <li key={d.device_id} style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--rule, #e5e0d3)' }}>
-                  <div><strong>{d.name}</strong> <code style={{ fontSize: '0.85em', color: 'var(--ink-muted)' }}>{d.device_id}</code></div>
-                  <div style={{ fontSize: '0.85em', color: 'var(--ink-muted)' }}>
-                    paired {d.paired_at.slice(0, 16).replace('T', ' ')}
-                    {' · '}
-                    {d.last_seen
-                      ? `last seen ${d.last_seen.slice(0, 16).replace('T', ' ')}`
-                      : 'never seen'}
+                <li
+                  key={d.device_id}
+                  style={{
+                    padding: '0.5rem 0',
+                    borderBottom: '1px solid var(--rule, #e5e0d3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div><strong>{d.name}</strong> <code style={{ fontSize: '0.85em', color: 'var(--ink-muted)' }}>{d.device_id}</code></div>
+                    <div style={{ fontSize: '0.85em', color: 'var(--ink-muted)' }}>
+                      paired {d.paired_at.slice(0, 16).replace('T', ' ')}
+                      {' · '}
+                      {d.last_seen
+                        ? `last seen ${d.last_seen.slice(0, 16).replace('T', ' ')}`
+                        : 'never seen'}
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => unpairDevice(d)}
+                    aria-label={`Unpair ${d.name}`}
+                  >
+                    Unpair
+                  </button>
                 </li>
               ))}
             </ul>

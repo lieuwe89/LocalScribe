@@ -82,9 +82,44 @@ The checked-in `wokwi.toml` points Wokwi at
 `ws://localhost:9011`. The simulator connects to Wi-Fi as `Wokwi-GUEST` on
 channel 6 and reaches the hub through `host.wokwi.internal`.
 
+## microSD Upload Queue
+
+If a microSD card is present, recordings are buffered to `/queue/` on the
+card before they are uploaded. The uploader drains the oldest file first,
+deletes it on a `202` from the hub, and retries the same file on failure.
+This means recording survives Wi-Fi outages, hub downtime, and reboots.
+
+Defaults match the Waveshare ESP32-S3-ePaper-1.54 V2 wiring, which uses
+1-bit SDMMC (not SPI):
+
+| Signal | GPIO |
+| ------ | ---- |
+| CLK    | 39   |
+| CMD    | 41   |
+| D0     | 40   |
+
+Override in `LocalLexisConfig.local.h` if your board differs:
+
+```cpp
+#undef LOCALLEXIS_SD_CLK
+#define LOCALLEXIS_SD_CLK 14
+```
+
+Files are named `Q<NNNNNNNNNNNN>.wav` using a monotonic NVS counter, so
+lexicographic order is chronological. In-progress writes use a
+`.wav.partial` suffix and are renamed on close; any partial files left
+behind by a crash are deleted on boot.
+
+Per-file size is capped at 4 MiB. Enqueue is rejected when the card is
+over 95% full.
+
+If the card is missing or fails to mount, the firmware falls back to the
+direct in-memory demo upload so single-shot smoke tests still work.
+
 ## Current Limits
 
-- Demo upload uses a generated 1-second silent WAV.
+- Demo upload uses a generated 1-second silent WAV (enqueued to SD when present).
 - Live I2S capture and e-paper UI are not implemented yet.
 - HTTPS uploads require the provisioned TLS SPKI pin and verify it before audio bytes are sent.
 - The sealed workspace key is stored as received; the firmware does not need to unseal it for signed upload, but future encrypted sync features may.
+- The drain path loads each queued file fully into RAM; replace with a streaming `SignedHttpClient` once capture lands so multi-MB clips don't blow the heap.

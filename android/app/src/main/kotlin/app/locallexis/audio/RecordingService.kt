@@ -79,13 +79,18 @@ class RecordingService : Service() {
     private fun startTicker() {
         ticker?.cancel()
         ticker = scope.launch {
+            var sinceNotification = 0L
             while (isActive) {
                 if (RecordingController.state.value.status == RecordingController.Status.Recording) {
                     val elapsed = SystemClock.elapsedRealtime() - startedAt - pausedAccumMs
                     RecordingController.tick(elapsed, engine.maxAmplitude())
-                    updateNotification(elapsed)
+                    sinceNotification += AMPLITUDE_TICK_MS
+                    if (sinceNotification >= NOTIFICATION_TICK_MS) {
+                        updateNotification(elapsed)
+                        sinceNotification = 0L
+                    }
                 }
-                delay(TICK_MS)
+                delay(AMPLITUDE_TICK_MS)
             }
         }
     }
@@ -177,7 +182,8 @@ class RecordingService : Service() {
         const val ACTION_STOP = "app.locallexis.action.STOP_RECORDING"
         private const val CHANNEL_ID = "recording"
         private const val NOTIF_ID = 1001
-        private const val TICK_MS = 500L
+        private const val AMPLITUDE_TICK_MS = 80L
+        private const val NOTIFICATION_TICK_MS = 1000L
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(

@@ -79,6 +79,20 @@ def _store(request: Request) -> PairingTokenStore:
     return request.app.state.pairing_tokens
 
 
+@router.delete("/devices/paired/{device_id}")
+def unpair_device(device_id: str, request: Request) -> dict[str, bool]:
+    """Revoke a paired device.
+
+    Removes its row from the device registry; subsequent signed requests
+    from the device fail auth (pubkey lookup miss → 401). Hub-admin
+    operation — gated by the bearer-token middleware, same as
+    ``GET /devices/paired``. Idempotent: deleting an unknown id is a
+    no-op.
+    """
+    request.app.state.device_registry.delete(device_id)
+    return {"ok": True}
+
+
 @router.get("/devices/paired", response_model=PairedDevicesResponse)
 def list_paired_devices(request: Request) -> PairedDevicesResponse:
     """List all paired devices.

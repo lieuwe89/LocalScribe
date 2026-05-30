@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -82,16 +83,20 @@ private fun DetailHeader(transcript: TranscriptEntity, speakerCount: Int) {
         Text(
             text = meta,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
     }
 }
 
+private val BubbleInk = Color(0xFF1A1815)
+private val BubbleAccent = Color(0xFF5A4220)
+
 @Composable
 private fun SegmentBubble(seg: SegmentRow) {
     Surface(
         color = speakerHue(seg.speakerName),
+        contentColor = BubbleInk,
         shape = RoundedCornerShape(10.dp),
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
     ) {
@@ -103,7 +108,7 @@ private fun SegmentBubble(seg: SegmentRow) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = BubbleAccent,
             )
             Text(
                 text = seg.text,

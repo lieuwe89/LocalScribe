@@ -58,8 +58,8 @@ class LibraryViewModelTest {
         val sync = FakeLibrarySync()
         val vm = LibraryViewModel(
             transcriptDao = db.transcriptDao(),
-            sync = sync,
-            workspaceId = "ws_a",
+            syncProvider = { sync },
+            workspaceIdProvider = { "ws_a" },
             scope = TestScope(testDispatcher),
         )
 
@@ -77,8 +77,8 @@ class LibraryViewModelTest {
         val sync = FakeLibrarySync()
         val vm = LibraryViewModel(
             transcriptDao = db.transcriptDao(),
-            sync = sync,
-            workspaceId = "ws_a",
+            syncProvider = { sync },
+            workspaceIdProvider = { "ws_a" },
             scope = TestScope(testDispatcher),
         )
 
@@ -96,8 +96,8 @@ class LibraryViewModelTest {
         val sync = FakeLibrarySync().apply { failNext = SyncException(401, "auth fail") }
         val vm = LibraryViewModel(
             transcriptDao = db.transcriptDao(),
-            sync = sync,
-            workspaceId = "ws_a",
+            syncProvider = { sync },
+            workspaceIdProvider = { "ws_a" },
             scope = TestScope(testDispatcher),
         )
 

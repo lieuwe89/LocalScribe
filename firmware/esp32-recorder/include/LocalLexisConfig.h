@@ -16,6 +16,43 @@
 #define LOCALLEXIS_BLE_HELLO_UUID "8f0d1b0a-1e5c-4d0c-9ad0-f0c4f5e9d002"
 #define LOCALLEXIS_BLE_PROVISION_RX_UUID "8f0d1b0a-1e5c-4d0c-9ad0-f0c4f5e9d003"
 
+// microSD pins for the on-board SDMMC card slot on the Waveshare
+// ESP32-S3-ePaper-1.54 V2. The slot is wired in 1-bit SDMMC mode, not SPI.
+// Override per board variant in LocalLexisConfig.local.h if needed.
+#ifndef LOCALLEXIS_SD_CLK
+#define LOCALLEXIS_SD_CLK 39
+#endif
+#ifndef LOCALLEXIS_SD_CMD
+#define LOCALLEXIS_SD_CMD 41
+#endif
+#ifndef LOCALLEXIS_SD_D0
+#define LOCALLEXIS_SD_D0 40
+#endif
+
+// 1.54" ePaper panel (SSD1681 / GDEY0154D67) on the board.
+// EPD_PWR is active-LOW: drive 0 to power the panel, 1 to cut it.
+#ifndef LOCALLEXIS_EPD_BUSY
+#define LOCALLEXIS_EPD_BUSY 8
+#endif
+#ifndef LOCALLEXIS_EPD_RST
+#define LOCALLEXIS_EPD_RST 9
+#endif
+#ifndef LOCALLEXIS_EPD_DC
+#define LOCALLEXIS_EPD_DC 10
+#endif
+#ifndef LOCALLEXIS_EPD_CS
+#define LOCALLEXIS_EPD_CS 11
+#endif
+#ifndef LOCALLEXIS_EPD_SCK
+#define LOCALLEXIS_EPD_SCK 12
+#endif
+#ifndef LOCALLEXIS_EPD_MOSI
+#define LOCALLEXIS_EPD_MOSI 13
+#endif
+#ifndef LOCALLEXIS_EPD_PWR
+#define LOCALLEXIS_EPD_PWR 6
+#endif
+
 #if defined(LOCALLEXIS_WOKWI_SIM)
 #undef LOCALLEXIS_WIFI_SSID
 #undef LOCALLEXIS_WIFI_PASSWORD

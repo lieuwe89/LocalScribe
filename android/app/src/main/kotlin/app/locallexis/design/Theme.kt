@@ -8,8 +8,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val Parchment = Color(0xFFF2EBDC)
+private val ParchmentDim = Color(0xFFE4DCC7)
 private val Ink = Color(0xFF1A1815)
+private val InkSoft = Color(0xFF3D362C)
 private val Accent = Color(0xFF7A5C2E)
+private val AccentSoft = Color(0xFF9C7E4C)
+private val Rule = Color(0xFF8A7B5C)
 
 private val LightColors = lightColorScheme(
     primary = Accent,
@@ -18,15 +22,23 @@ private val LightColors = lightColorScheme(
     onBackground = Ink,
     surface = Parchment,
     onSurface = Ink,
+    surfaceVariant = ParchmentDim,
+    onSurfaceVariant = InkSoft,
+    outline = Rule,
+    outlineVariant = Rule,
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Accent,
+    primary = AccentSoft,
     onPrimary = Ink,
     background = Ink,
     onBackground = Parchment,
     surface = Ink,
     onSurface = Parchment,
+    surfaceVariant = InkSoft,
+    onSurfaceVariant = ParchmentDim,
+    outline = ParchmentDim,
+    outlineVariant = ParchmentDim,
 )
 
 @Composable

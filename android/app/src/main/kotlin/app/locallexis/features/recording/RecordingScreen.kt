@@ -11,18 +11,24 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import kotlin.math.log10
+import kotlin.math.max
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -42,7 +48,7 @@ fun RecordingScreen() {
     val context = LocalContext.current
     val graph = remember(context) { context.appGraph }
     val state by RecordingController.state.collectAsState()
-    val paired = remember(state.status) { graph.hubConfig.isPaired() }
+    val paired = graph.hubConfig.isPaired()
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -100,8 +106,9 @@ fun RecordingContent(
             )
 
             if (active) {
-                LinearProgressIndicator(
-                    progress = { (state.amplitude / 32767f).coerceIn(0f, 1f) },
+                VuMeter(
+                    amplitude = state.amplitude,
+                    active = state.status == RecordingController.Status.Recording,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 24.dp),
@@ -145,6 +152,40 @@ fun RecordingContent(
                 }
             }
         }
+    }
+}
+
+private const val VU_FLOOR_DB = -50f
+
+@Composable
+private fun VuMeter(amplitude: Int, active: Boolean, modifier: Modifier = Modifier) {
+    val normalized = remember(amplitude) {
+        val amp = max(1, amplitude).toFloat()
+        val db = 20f * log10(amp / 32767f)
+        ((db - VU_FLOOR_DB) / -VU_FLOOR_DB).coerceIn(0f, 1f)
+    }
+    val animated by animateFloatAsState(
+        targetValue = if (active) normalized else 0f,
+        animationSpec = tween(durationMillis = 90),
+        label = "vu-level",
+    )
+    val barColor = when {
+        animated > 0.92f -> MaterialTheme.colorScheme.error
+        animated > 0.75f -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+    }
+    Box(
+        modifier = modifier
+            .height(10.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(animated)
+                .height(10.dp)
+                .background(barColor),
+        )
     }
 }
 

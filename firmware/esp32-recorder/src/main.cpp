@@ -8,6 +8,9 @@
 #include "provisioning/BleProvisioning.h"
 #include "sim/WokwiProvisioning.h"
 #include "storage/IdentityStore.h"
+#if !defined(LOCALLEXIS_WOKWI_SIM)
+#include "storage/SdQueue.h"
+#endif
 
 using locallexis::provisioning::BleProvisioning;
 using locallexis::storage::DeviceIdentity;
@@ -18,6 +21,10 @@ IdentityStore g_store;
 DeviceIdentity g_identity;
 BleProvisioning* g_ble = nullptr;
 bool g_uploadedDemo = false;
+bool g_demoEnqueued = false;
+#if !defined(LOCALLEXIS_WOKWI_SIM)
+locallexis::storage::SdQueue g_sdQueue;
+#endif
 
 bool connectWifi() {
     if (String(LOCALLEXIS_WIFI_SSID).isEmpty()) {
@@ -127,6 +134,57 @@ void uploadDemoWavOnce() {
     );
     Serial.printf("Upload result: %s\n%s\n", ok ? "ok" : "failed", response.c_str());
 }
+
+#if !defined(LOCALLEXIS_WOKWI_SIM)
+void enqueueDemoOnce() {
+    if (g_demoEnqueued || !g_identity.provisioned || !g_sdQueue.ready()) {
+        return;
+    }
+    const auto wav = locallexis::net::makeSilenceWav(16000, 1);
+    String path;
+    if (g_sdQueue.enqueue(wav, &path)) {
+        g_demoEnqueued = true;
+        Serial.printf("Enqueued demo WAV to SD: %s\n", path.c_str());
+    }
+}
+
+void drainQueueStep() {
+    if (!g_sdQueue.ready()
+        || !g_identity.provisioned
+        || WiFi.status() != WL_CONNECTED) {
+        return;
+    }
+
+    String path;
+    std::vector<uint8_t> bytes;
+    if (!g_sdQueue.peekOldest(path, bytes)) {
+        return;
+    }
+
+    const int slash = path.lastIndexOf('/');
+    const String filename = slash >= 0 ? path.substring(slash + 1) : path;
+
+    Serial.printf("Draining %s (%u bytes)\n",
+                  filename.c_str(),
+                  static_cast<unsigned>(bytes.size()));
+    String response;
+    locallexis::net::SignedHttpClient client;
+    const bool ok = client.uploadWav(
+        g_identity.provisioning,
+        g_identity.keys,
+        filename,
+        bytes,
+        response
+    );
+    Serial.printf("Drain result: %s\n%s\n", ok ? "ok" : "failed", response.c_str());
+
+    if (ok) {
+        g_sdQueue.removeFile(path);
+    } else {
+        delay(2000);
+    }
+}
+#endif
 }  // namespace
 
 void setup() {
@@ -144,6 +202,14 @@ void setup() {
         Serial.println("Failed to open NVS identity store");
     }
     g_store.load(g_identity);
+
+#if !defined(LOCALLEXIS_WOKWI_SIM)
+    g_sdQueue.begin(
+        LOCALLEXIS_SD_CLK,
+        LOCALLEXIS_SD_CMD,
+        LOCALLEXIS_SD_D0
+    );
+#endif
 
     const String pubkeyB64 = locallexis::crypto::base64Encode(
         g_identity.keys.publicKey,
@@ -169,14 +235,31 @@ void setup() {
         tryWokwiProvisioning();
 #endif
         if (syncClock()) {
+#if !defined(LOCALLEXIS_WOKWI_SIM)
+            if (g_sdQueue.ready()) {
+                enqueueDemoOnce();
+            } else {
+                uploadDemoWavOnce();
+            }
+#else
             uploadDemoWavOnce();
+#endif
         }
     }
 }
 
 void loop() {
     if (g_identity.provisioned && WiFi.status() == WL_CONNECTED) {
+#if !defined(LOCALLEXIS_WOKWI_SIM)
+        if (g_sdQueue.ready()) {
+            enqueueDemoOnce();
+            drainQueueStep();
+        } else {
+            uploadDemoWavOnce();
+        }
+#else
         uploadDemoWavOnce();
+#endif
     }
     delay(1000);
 }

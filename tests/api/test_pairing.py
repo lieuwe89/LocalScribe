@@ -380,3 +380,45 @@ class TestListPairedDevices:
         assert dev["device_id"].startswith("dev-")
         assert dev["name"] == "device-name-X"
         assert dev["last_seen"] is None  # never seen until a signed call
+
+
+class TestUnpairDevice:
+    def _b64(self, raw: bytes) -> str:
+        return base64.b64encode(raw).decode("ascii")
+
+    def _pair(self, client: TestClient, name: str) -> str:
+        token = client.post("/pair/tokens").json()["token"]
+        sk = SigningKey.generate()
+        r = client.post(
+            "/pair",
+            json={
+                "token": token,
+                "device_pubkey_b64": self._b64(bytes(sk.verify_key)),
+                "device_name": name,
+            },
+        )
+        return r.json()["device_id"]
+
+    def test_unpair_removes_device(self, app) -> None:
+        client = TestClient(app)
+        dev_id = self._pair(client, "ipad-A")
+        r = client.delete(f"/devices/paired/{dev_id}")
+        assert r.status_code == 200
+        assert r.json() == {"ok": True}
+        listing = client.get("/devices/paired").json()["devices"]
+        assert all(d["device_id"] != dev_id for d in listing)
+
+    def test_unpair_unknown_is_noop(self, app) -> None:
+        client = TestClient(app)
+        r = client.delete("/devices/paired/dev-nonexistent")
+        assert r.status_code == 200
+        assert r.json() == {"ok": True}
+
+    def test_unpair_only_targets_one(self, app) -> None:
+        client = TestClient(app)
+        keep = self._pair(client, "ipad-keep")
+        drop = self._pair(client, "ipad-drop")
+        client.delete(f"/devices/paired/{drop}")
+        listing = client.get("/devices/paired").json()["devices"]
+        ids = {d["device_id"] for d in listing}
+        assert keep in ids and drop not in ids

@@ -11,8 +11,8 @@ import app.locallexis.AppGraph
 class LibraryViewModelHolder(graph: AppGraph) : ViewModel() {
     val vm: LibraryViewModel = LibraryViewModel(
         transcriptDao = graph.db.transcriptDao(),
-        sync = graph.librarySync(),
-        workspaceId = graph.workspaceId(),
+        syncProvider = graph::librarySync,
+        workspaceIdProvider = graph::workspaceId,
         scope = viewModelScope,
     )
 
